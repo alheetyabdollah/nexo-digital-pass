@@ -24,7 +24,7 @@ export default function PasswordCard({ label, value, onChange }: PasswordCardPro
       <label className="block text-right text-lg font-bold text-white">{label}</label>
 
       <div className="mt-4 flex items-center gap-3">
-        <button type="button" onClick={copyPassword} className="rounded-xl bg-zinc-800 p-3 hover:bg-orange-500 transition">
+        <button type="button" onClick={copyPassword} className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/40 text-white/70 transition-all duration-300 hover:border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-400 active:scale-95">
           {copied ? <Check size={20} /> : <Copy size={20} />}
         </button>
 

@@ -1,30 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import PageHeader from "@/components/layout/PageHeader";
-import AppCard from "@/components/cards/AppCard";
+import { HiOutlineArrowLeft, HiOutlineCube } from "react-icons/hi2";
+
 import { supabase } from "@/lib/supabase";
+import VaultHeader from "./components/VaultHeader";
+import WelcomeCard from "./components/WelcomeCard";
+import VaultSummaryCard from "./components/VaultSummaryCard";
+import AppsGrid from "./components/AppsGrid";
+import SecurityCard from "./components/SecurityCard";
 
-import { FaApple, FaFacebook, FaWhatsapp, FaTelegramPlane } from "react-icons/fa";
-import { SiGoogleplay, SiInstagram, SiTiktok } from "react-icons/si";
-import { HiOutlineSquares2X2 } from "react-icons/hi2";
+type ServiceCount = {
+  service: string;
+};
 
-const apps = [
-  { icon: <FaApple size={42} className="text-white" />, name: "Apple ID", desc: "إدارة حساب Apple", href: "/apple", featured: true },
-  { icon: <SiGoogleplay size={40} className="text-white" />, name: "Google Play", desc: "إدارة حساب Google Play", href: "/google" },
-  { icon: <SiInstagram size={40} className="text-pink-500" />, name: "Instagram", desc: "إدارة حساب Instagram", href: "/instagram" },
-  { icon: <FaFacebook size={40} className="text-blue-500" />, name: "Facebook", desc: "إدارة حساب Facebook", href: "/facebook" },
-  { icon: <FaWhatsapp size={40} className="text-green-500" />, name: "WhatsApp", desc: "إدارة حساب WhatsApp", href: "/whatsapp" },
-  { icon: <SiTiktok size={40} className="text-white" />, name: "TikTok", desc: "إدارة حساب TikTok", href: "/tiktok" },
-  { icon: <FaTelegramPlane size={40} className="text-sky-400" />, name: "Telegram", desc: "إدارة حساب Telegram", href: "/telegram" },
-  { icon: <HiOutlineSquares2X2 size={40} className="text-orange-400" />, name: "أخرى", desc: "PlayStation, Xbox أو أي حساب آخر", href: "/other" },
-];
-
-export default function VaultPage() {
+export default function VaultClient() {
   const searchParams = useSearchParams();
   const cardCode = searchParams.get("card");
+
+  const [loading, setLoading] = useState(true);
+  const [accounts, setAccounts] = useState<ServiceCount[]>([]);
+  const [cardId, setCardId] = useState<string | null>(null);
+
+  const accountCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    accounts.forEach((account) => {
+      const service = account.service?.toLowerCase();
+
+      if (!service) return;
+
+      counts[service] = (counts[service] || 0) + 1;
+    });
+
+    return counts;
+  }, [accounts]);
+
+  const totalAccounts = accounts.length;
 
   const closeVault = () => {
     if (!cardCode) {
@@ -33,83 +47,173 @@ export default function VaultPage() {
     }
 
     localStorage.removeItem(`nexo_unlocked_${cardCode}`);
-    sessionStorage.removeItem(`nexo_unlocked_${cardCode}`);
+    sessionStorage.removeItem(`nexo_vault_password_${cardCode}`);
     window.location.href = `/card/${cardCode}`;
   };
 
   useEffect(() => {
-    async function checkAccess() {
-      if (!cardCode) return;
-sessionStorage.setItem("nexo_last_card", cardCode);
-      const unlocked = sessionStorage.getItem(`nexo_unlocked_${cardCode}`);
+    async function loadVault() {
+      if (!cardCode) {
+        setLoading(false);
+        return;
+      }
 
-      if (!unlocked) {
+      sessionStorage.setItem("nexo_last_card", cardCode);
+
+      const unlocked = localStorage.getItem(
+        `nexo_unlocked_${cardCode}`
+      );
+
+      const vaultPassword = sessionStorage.getItem(
+        `nexo_vault_password_${cardCode}`
+      );
+
+      if (!unlocked || !vaultPassword) {
         window.location.href = `/unlock?card=${cardCode}`;
         return;
       }
 
-      const { data: card, error } = await supabase
+      const { data: card, error: cardError } = await supabase
         .from("cards")
         .select("id")
         .eq("card_code", cardCode)
         .maybeSingle();
 
-      if (error || !card) {
+      if (cardError || !card) {
         window.location.href = `/card/${cardCode}`;
+        return;
       }
+
+      setCardId(card.id);
+
+      const { data: accountData, error: accountsError } =
+        await supabase
+          .from("accounts")
+          .select("service")
+          .eq("card_id", card.id);
+
+      if (!accountsError && accountData) {
+        setAccounts(accountData);
+      }
+
+      setLoading(false);
     }
 
-    checkAccess();
+    loadVault();
   }, [cardCode]);
 
-  return (
-    <main className="min-h-screen bg-gradient-to-br from-[#111111] via-[#0b0b0b] to-[#111111] text-white p-8">
-      <div className="relative mx-auto max-w-6xl">
-        <div className="absolute left-1/2 top-0 -translate-x-1/2 w-[700px] h-[700px] rounded-full bg-orange-500/5 blur-[180px] -z-10" />
+  useEffect(() => {
+    if (!cardCode) return;
 
-        <PageHeader
-          title="خزنتك الرقمية"
-          subtitle="أضف حسابًا جديدًا أو اختر الخدمة التي تريد إدارتها."
+    let timer: ReturnType<typeof setTimeout>;
+
+    const lockVault = () => {
+      localStorage.removeItem(`nexo_unlocked_${cardCode}`);
+      sessionStorage.removeItem(`nexo_vault_password_${cardCode}`);
+      window.location.href = `/unlock?card=${cardCode}`;
+    };
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(lockVault, 10 * 60 * 1000);
+    };
+
+    const events = [
+      "mousemove",
+      "keydown",
+      "click",
+      "scroll",
+      "touchstart",
+    ];
+
+    events.forEach((event) => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+
+      events.forEach((event) => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [cardCode]);
+
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#070707] text-white">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-11 w-11 animate-spin rounded-full border-4 border-white/10 border-t-orange-500" />
+
+          <p className="text-sm text-white/60">
+            جاري تجهيز خزنتك...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main
+      dir="rtl"
+      className="min-h-screen overflow-x-hidden bg-[#070707] text-white"
+    >
+      <div className="relative mx-auto min-h-screen w-full max-w-[480px] overflow-hidden px-4 pb-10 pt-5">
+        <div className="pointer-events-none absolute -top-28 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-orange-500/10 blur-[90px]" />
+
+        <VaultHeader onClose={closeVault} />
+
+        <WelcomeCard />
+
+        <VaultSummaryCard
+          cardCode={cardCode}
+          totalAccounts={totalAccounts}
         />
 
-        <div className="mb-8 flex justify-center">
-          <button
-            onClick={closeVault}
-            className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-3 font-bold text-red-300 transition hover:bg-red-500/20"
-          >
-            إغلاق الخزنة
-          </button>
-        </div>
-
         <Link
-          href={`/service/all?card=${cardCode}`}
-          className="mb-10 flex items-center justify-center gap-3 rounded-3xl border border-orange-500/30 bg-orange-500/10 p-6 text-2xl font-bold text-orange-400 transition hover:bg-orange-500/20"
+          href={
+            cardCode
+              ? `/service/all?card=${cardCode}`
+              : "/service/all"
+          }
+          className="mb-6 flex items-center justify-between rounded-[25px] border border-orange-500/30 bg-white/[0.04] p-5 transition active:scale-[0.98]"
         >
-          📦 الخزنة
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/15 text-orange-400">
+              <HiOutlineCube size={28} />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black">
+                كل الحسابات
+              </h3>
+
+              <p className="mt-1 text-xs text-white/45">
+                عرض وإدارة جميع حسابات خزنتك
+              </p>
+            </div>
+          </div>
+
+          <HiOutlineArrowLeft
+            size={23}
+            className="text-orange-400"
+          />
         </Link>
 
-        {!cardCode && (
-          <div className="mb-8 rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-center text-red-300">
-            لم يتم تحديد البطاقة. افتح الخزنة من رابط البطاقة.
-          </div>
+        <AppsGrid
+          cardCode={cardCode}
+          accountCounts={accountCounts}
+        />
+
+        <SecurityCard />
+
+        {!cardId && cardCode && (
+          <p className="mt-5 text-center text-xs text-red-300">
+            تعذر تحميل معلومات البطاقة بشكل كامل.
+          </p>
         )}
-
-        <h2 className="mb-6 text-right text-3xl font-bold text-orange-400">
-          ➕ إضافة حساب جديد
-        </h2>
-
-        <div className="grid md:grid-cols-2 gap-8">
-          {apps.map((app) => (
-            <AppCard
-              key={app.name}
-              name={app.name}
-              desc={app.desc}
-              href={cardCode ? `${app.href}?card=${cardCode}` : app.href}
-              icon={app.icon}
-              featured={app.featured}
-            />
-          ))}
-        </div>
       </div>
     </main>
   );

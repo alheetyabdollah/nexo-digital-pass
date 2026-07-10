@@ -1,26 +1,457 @@
 @import "tailwindcss";
 
+/* ========================================
+   NEXO DESIGN SYSTEM
+======================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  /* الألوان الأساسية */
+  --nexo-background: #070707;
+  --nexo-surface: #111111;
+  --nexo-surface-soft: #151515;
+  --nexo-surface-deep: #050505;
+
+  --nexo-orange: #ff6a00;
+  --nexo-orange-light: #ff8a33;
+  --nexo-orange-dark: #d95700;
+
+  --nexo-white: #ffffff;
+  --nexo-text: #f5f5f5;
+  --nexo-text-muted: rgba(255, 255, 255, 0.5);
+  --nexo-text-soft: rgba(255, 255, 255, 0.7);
+
+  --nexo-success: #4ade80;
+  --nexo-danger: #ef4444;
+  --nexo-warning: #f59e0b;
+
+  /* الحدود */
+  --nexo-border: rgba(255, 255, 255, 0.1);
+  --nexo-border-strong: rgba(255, 255, 255, 0.16);
+  --nexo-border-orange: rgba(255, 106, 0, 0.32);
+
+  /* الحواف */
+  --nexo-radius-small: 14px;
+  --nexo-radius-medium: 18px;
+  --nexo-radius-large: 24px;
+  --nexo-radius-xlarge: 28px;
+  --nexo-radius-dialog: 30px;
+
+  /* الظلال */
+  --nexo-shadow-card: 0 18px 55px rgba(0, 0, 0, 0.35);
+  --nexo-shadow-orange: 0 20px 70px rgba(255, 106, 0, 0.1);
+  --nexo-shadow-danger: 0 24px 80px rgba(239, 68, 68, 0.2);
+
+  /* الحركة */
+  --nexo-transition-fast: 160ms ease;
+  --nexo-transition-normal: 260ms ease;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--nexo-background);
+  --color-foreground: var(--nexo-text);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ========================================
+   BASE
+======================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--nexo-background);
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--nexo-background);
+  color: var(--nexo-text);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(255, 106, 0, 0.35);
+  color: #ffffff;
+}
+
+/* Scrollbar */
+
+::-webkit-scrollbar {
+  width: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--nexo-background);
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 106, 0, 0.42);
+}
+
+/* ========================================
+   PAGE LAYOUT
+======================================== */
+
+.nexo-page {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: var(--nexo-background);
+  color: var(--nexo-text);
+}
+
+.nexo-container {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: 20px 16px 48px;
+  overflow: hidden;
+}
+
+.nexo-background-glow {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  width: 290px;
+  height: 290px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 106, 0, 0.1);
+  filter: blur(90px);
+}
+
+/* ========================================
+   CARDS
+======================================== */
+
+.nexo-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--nexo-border);
+  border-radius: var(--nexo-radius-large);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.055),
+      rgba(255, 255, 255, 0.028),
+      rgba(255, 106, 0, 0.014)
+    );
+  box-shadow: var(--nexo-shadow-card);
+}
+
+.nexo-card-accent {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--nexo-border-orange);
+  border-radius: var(--nexo-radius-xlarge);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 106, 0, 0.1),
+      rgba(255, 255, 255, 0.035),
+      transparent
+    );
+  box-shadow: var(--nexo-shadow-orange);
+}
+
+.nexo-card-interactive {
+  transition:
+    transform var(--nexo-transition-normal),
+    border-color var(--nexo-transition-normal),
+    background var(--nexo-transition-normal),
+    box-shadow var(--nexo-transition-normal);
+}
+
+.nexo-card-interactive:hover {
+  border-color: rgba(255, 106, 0, 0.4);
+  box-shadow: 0 0 28px rgba(255, 106, 0, 0.12);
+}
+
+.nexo-card-interactive:active {
+  transform: scale(0.975);
+}
+
+/* ========================================
+   ICON BOXES
+======================================== */
+
+.nexo-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--nexo-border);
+  border-radius: var(--nexo-radius-medium);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.nexo-icon-box-orange {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--nexo-border-orange);
+  border-radius: var(--nexo-radius-medium);
+  background: rgba(255, 106, 0, 0.1);
+  color: var(--nexo-orange);
+}
+
+/* ========================================
+   BUTTONS
+======================================== */
+
+.nexo-button {
+  display: inline-flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--nexo-radius-medium);
+  padding: 12px 18px;
+  border: 0;
+  font-weight: 800;
+  transition:
+    transform var(--nexo-transition-fast),
+    background var(--nexo-transition-fast),
+    border-color var(--nexo-transition-fast),
+    color var(--nexo-transition-fast);
+}
+
+.nexo-button:active {
+  transform: scale(0.97);
+}
+
+.nexo-button-primary {
+  background: var(--nexo-orange);
+  color: #070707;
+}
+
+.nexo-button-primary:hover {
+  background: var(--nexo-orange-light);
+}
+
+.nexo-button-secondary {
+  border: 1px solid var(--nexo-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--nexo-text-soft);
+}
+
+.nexo-button-secondary:hover {
+  border-color: var(--nexo-border-strong);
+  background: rgba(255, 255, 255, 0.085);
+  color: #ffffff;
+}
+
+.nexo-button-danger {
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+.nexo-button-danger:hover {
+  background: var(--nexo-danger);
+  color: #ffffff;
+}
+
+.nexo-icon-button {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--nexo-border);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.65);
+  transition:
+    transform var(--nexo-transition-fast),
+    border-color var(--nexo-transition-fast),
+    background var(--nexo-transition-fast),
+    color var(--nexo-transition-fast);
+}
+
+.nexo-icon-button:hover {
+  border-color: rgba(255, 106, 0, 0.4);
+  background: rgba(255, 106, 0, 0.1);
+  color: var(--nexo-orange);
+}
+
+.nexo-icon-button:active {
+  transform: scale(0.94);
+}
+
+/* ========================================
+   INPUTS
+======================================== */
+
+.nexo-input,
+.nexo-textarea {
+  width: 100%;
+  border: 1px solid var(--nexo-border);
+  border-radius: var(--nexo-radius-medium);
+  background: rgba(0, 0, 0, 0.42);
+  color: #ffffff;
+  outline: none;
+  transition:
+    border-color var(--nexo-transition-fast),
+    box-shadow var(--nexo-transition-fast);
+}
+
+.nexo-input {
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+.nexo-textarea {
+  min-height: 112px;
+  padding: 16px;
+  resize: none;
+}
+
+.nexo-input::placeholder,
+.nexo-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.nexo-input:focus,
+.nexo-textarea:focus {
+  border-color: rgba(255, 106, 0, 0.65);
+  box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.1);
+}
+
+/* ========================================
+   TEXT
+======================================== */
+
+.nexo-title {
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.nexo-title-orange {
+  font-weight: 900;
+  color: var(--nexo-orange);
+}
+
+.nexo-muted {
+  color: var(--nexo-text-muted);
+}
+
+.nexo-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ========================================
+   STATUS MESSAGES
+======================================== */
+
+.nexo-status {
+  border-radius: 16px;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nexo-status-success {
+  border: 1px solid rgba(74, 222, 128, 0.22);
+  background: rgba(74, 222, 128, 0.1);
+  color: #86efac;
+}
+
+.nexo-status-loading {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  background: rgba(255, 106, 0, 0.1);
+  color: #fdba74;
+}
+
+.nexo-status-error {
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+/* ========================================
+   ANIMATIONS
+======================================== */
+
+@keyframes nexo-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nexo-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    filter: drop-shadow(0 0 5px rgba(255, 106, 0, 0.2));
+  }
+
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 14px rgba(255, 106, 0, 0.55));
+  }
+}
+
+.nexo-fade-up {
+  animation: nexo-fade-up 420ms ease both;
+}
+
+.nexo-breathe {
+  animation: nexo-breathe 4s ease-in-out infinite;
+}
+
+/* احترام إعداد تقليل الحركة بالجهاز */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

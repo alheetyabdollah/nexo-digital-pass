@@ -1,3 +1,12 @@
+"use client";
+
+import {
+  Pencil,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
+
 type AccountActionsProps = {
   editing: boolean;
   onEdit: () => void;
@@ -14,40 +23,54 @@ export default function AccountActions({
   onDelete,
 }: AccountActionsProps) {
   return (
-    <div className="grid grid-cols-2 gap-4 pt-4">
-      {editing ? (
-        <>
-          <button
-            onClick={onSave}
-            className="rounded-3xl bg-green-600 py-5 font-bold hover:bg-green-700 transition"
-          >
-            💾 حفظ التعديلات
-          </button>
+    <section className="rounded-[24px] border border-white/10 bg-white/[0.025] p-4">
+      <p className="mb-4 text-xs font-bold text-white/40">
+        إدارة الحساب
+      </p>
 
-          <button
-            onClick={onCancel}
-            className="rounded-3xl bg-zinc-700 py-5 font-bold hover:bg-zinc-600 transition"
-          >
-            ❌ إلغاء
-          </button>
-        </>
-      ) : (
-        <>
-          <button
-            onClick={onEdit}
-            className="rounded-3xl bg-orange-500 py-5 font-bold hover:bg-orange-600 transition"
-          >
-            ✏️ تعديل
-          </button>
+      <div className="grid grid-cols-2 gap-3">
+        {editing ? (
+          <>
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-orange-500 px-3 font-black text-black transition-all duration-300 hover:bg-orange-400 active:scale-[0.97]"
+            >
+              <Save size={19} />
+              حفظ التعديلات
+            </button>
 
-          <button
-            onClick={onDelete}
-            className="rounded-3xl bg-red-600 py-5 font-bold hover:bg-red-700 transition"
-          >
-            🗑 حذف
-          </button>
-        </>
-      )}
-    </div>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-3 font-black text-white/70 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.08] hover:text-white active:scale-[0.97]"
+            >
+              <X size={19} />
+              إلغاء
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-orange-500 px-3 font-black text-black transition-all duration-300 hover:bg-orange-400 active:scale-[0.97]"
+            >
+              <Pencil size={19} />
+              تعديل
+            </button>
+
+            <button
+              type="button"
+              onClick={onDelete}
+              className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/10 px-3 font-black text-red-300 transition-all duration-300 hover:bg-red-500 hover:text-white active:scale-[0.97]"
+            >
+              <Trash2 size={19} />
+              حذف
+            </button>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
