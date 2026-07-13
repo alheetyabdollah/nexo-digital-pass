@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -21,7 +21,25 @@ function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const cardCode = searchParams.get("card");
+useEffect(() => {
+  if (!cardCode) {
+    router.replace("/");
+  }
+}, [cardCode, router]);
 
+if (!cardCode) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#0b0b0b] text-white">
+      <div className="text-center">
+        <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-orange-500" />
+
+        <p className="text-sm text-white/50">
+          جاري التحقق من البطاقة...
+        </p>
+      </div>
+    </main>
+  );
+}
   const [step, setStep] = useState(1);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
