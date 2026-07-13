@@ -5,48 +5,64 @@ import {
 
 export default function WelcomeCard() {
   return (
-    <section className="relative mb-4 overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.035] p-5 shadow-2xl">
-      <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full bg-orange-500/10 blur-3xl" />
+    <section className="relative mb-5 overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6 shadow-[0_25px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl">
 
-      <div className="relative flex items-start gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-orange-500/30 bg-orange-500/10 text-orange-400">
-          <HiOutlineShieldCheck size={32} />
+      <div className="absolute -top-20 -left-20 h-48 w-48 rounded-full bg-orange-500/10 blur-[80px]" />
+
+      <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-orange-500/80 to-transparent" />
+
+      <div className="relative flex items-center gap-4">
+
+        <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-orange-500/30 bg-orange-500/10 text-orange-400 shadow-[0_0_30px_rgba(255,106,0,0.15)]">
+          <HiOutlineShieldCheck size={34} />
         </div>
 
         <div>
-          <p className="text-sm text-white/70">
-            مرحبًا بك في
+          <p className="text-xs font-bold tracking-[0.22em] text-orange-400/80">
+            NEXO SECURITY
           </p>
 
-          <h2 className="mt-1 text-2xl font-black text-orange-500">
+          <h2 className="mt-2 text-3xl font-black text-white">
             خزنتك الرقمية
           </h2>
+
+          <p className="mt-2 text-sm leading-7 text-white/50">
+            جميع حساباتك في مكان واحد، محمية بتشفير قوي.
+          </p>
         </div>
+
       </div>
 
-      <div className="relative mt-5 space-y-3 text-sm leading-7 text-white/65">
-        <p className="flex items-start gap-2">
+      <div className="mt-7 grid gap-3">
+
+        <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
+
           <HiOutlineLockClosed
-            size={18}
-            className="mt-1 shrink-0 text-orange-400"
+            size={20}
+            className="text-orange-400"
           />
 
-          <span>
-            بياناتك تُشفَّر على جهازك قبل حفظها، وهي ملكٌ لك وحدك.
+          <span className="text-sm text-white/70">
+            كلمات المرور تبقى مشفرة ولا يمكن قراءتها.
           </span>
-        </p>
 
-        <p className="flex items-start gap-2">
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
+
           <HiOutlineShieldCheck
-            size={19}
-            className="mt-1 shrink-0 text-orange-400"
+            size={20}
+            className="text-orange-400"
           />
 
-          <span>
-            حتى فريق NEXO لا يستطيع الاطلاع على كلمات مرورك أو محتوى حساباتك.
+          <span className="text-sm text-white/70">
+            حتى فريق NEXO لا يستطيع الوصول إلى بياناتك.
           </span>
-        </p>
+
+        </div>
+
       </div>
+
     </section>
   );
 }

@@ -2,6 +2,8 @@
 
 import {
   AlertTriangle,
+  CheckCircle2,
+  Loader2,
   ShieldAlert,
   Trash2,
   X,
@@ -11,6 +13,8 @@ type DeleteDialogProps = {
   open: boolean;
   service: string;
   accountName: string;
+  deleting: boolean;
+  deleted: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -19,16 +23,66 @@ export default function DeleteDialog({
   open,
   service,
   accountName,
+  deleting,
+  deleted,
   onCancel,
   onConfirm,
 }: DeleteDialogProps) {
   if (!open) return null;
 
+  if (deleted) {
+    return (
+      <div
+        dir="rtl"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+      >
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-success-title"
+          className="relative w-full max-w-[420px] overflow-hidden rounded-[30px] border border-green-500/25 bg-[#111111] p-6 text-center shadow-[0_25px_90px_rgba(34,197,94,0.18)]"
+        >
+          <div className="pointer-events-none absolute -left-16 -top-16 h-44 w-44 rounded-full bg-green-500/10 blur-[70px]" />
+
+          <div className="relative">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[26px] border border-green-500/30 bg-green-500/10 text-green-400">
+              <CheckCircle2 size={40} />
+            </div>
+
+            <h2
+              id="delete-success-title"
+              className="mt-5 text-2xl font-black text-white"
+            >
+              تم حذف الحساب بنجاح
+            </h2>
+
+            <p className="mt-3 text-sm leading-7 text-white/50">
+              تم حذف حساب {service} نهائيًا.
+            </p>
+
+            <div className="mt-5 flex items-center justify-center gap-2 text-xs text-white/40">
+              <Loader2
+                size={16}
+                className="animate-spin text-green-400"
+              />
+
+              جاري الرجوع إلى قائمة الحسابات...
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div
       dir="rtl"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
-      onClick={onCancel}
+      onClick={() => {
+        if (!deleting) {
+          onCancel();
+        }
+      }}
     >
       <section
         role="dialog"
@@ -42,7 +96,8 @@ export default function DeleteDialog({
         <button
           type="button"
           onClick={onCancel}
-          className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-white/50 transition hover:bg-white/10 hover:text-white"
+          disabled={deleting}
+          className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-white/50 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="إغلاق نافذة الحذف"
         >
           <X size={19} />
@@ -93,7 +148,8 @@ export default function DeleteDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] font-black text-white/70 transition hover:bg-white/[0.09] hover:text-white active:scale-[0.97]"
+            disabled={deleting}
+            className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] font-black text-white/70 transition hover:bg-white/[0.09] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X size={19} />
             إلغاء
@@ -102,10 +158,24 @@ export default function DeleteDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-red-600 font-black text-white transition hover:bg-red-500 active:scale-[0.97]"
+            disabled={deleting}
+            className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-red-600 font-black text-white transition hover:bg-red-500 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <AlertTriangle size={19} />
-            حذف نهائي
+            {deleting ? (
+              <>
+                <Loader2
+                  size={19}
+                  className="animate-spin"
+                />
+
+                جاري الحذف...
+              </>
+            ) : (
+              <>
+                <AlertTriangle size={19} />
+                حذف نهائي
+              </>
+            )}
           </button>
         </div>
       </section>

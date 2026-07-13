@@ -108,8 +108,12 @@ export default function AccountDetailsPage() {
 
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+
   const [showDeleteConfirm, setShowDeleteConfirm] =
     useState(false);
+
+  const [deleting, setDeleting] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -234,7 +238,7 @@ export default function AccountDetailsPage() {
     ) => {
       if (!value?.trim()) return null;
 
-      return await encryptText(
+      return encryptText(
         value.trim(),
         vaultPassword
       );
@@ -277,10 +281,10 @@ export default function AccountDetailsPage() {
   };
 
   const deleteAccount = async () => {
-    if (!account) return;
+    if (!account || deleting) return;
 
-    setShowDeleteConfirm(false);
-    setStatus("جاري حذف الحساب...");
+    setDeleting(true);
+    setStatus("");
 
     const { error } = await supabase
       .from("accounts")
@@ -291,16 +295,18 @@ export default function AccountDetailsPage() {
     if (error) {
       console.error(error);
       setStatus("حدث خطأ أثناء الحذف");
+      setDeleting(false);
       return;
     }
 
-    setStatus("تم حذف الحساب بنجاح ✅");
+    setDeleting(false);
+    setDeleted(true);
 
     setTimeout(() => {
-      router.push(
+      router.replace(
         `/service/all?card=${cardCode}`
       );
-    }, 900);
+    }, 1800);
   };
 
   if (loading || !account) {
@@ -331,7 +337,6 @@ export default function AccountDetailsPage() {
       <div className="relative mx-auto min-h-screen w-full max-w-[480px] overflow-hidden px-4 pb-12 pt-5">
         <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-orange-500/10 blur-[90px]" />
 
-        {/* الهيدر */}
         <header className="relative mb-6 flex items-center justify-between">
           <Link
             href={
@@ -360,7 +365,6 @@ export default function AccountDetailsPage() {
           </div>
         </header>
 
-        {/* بطاقة الحساب */}
         <section className="relative mb-5 overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.06] via-white/[0.035] to-orange-500/[0.03] p-5 shadow-[0_20px_70px_rgba(255,106,0,0.08)]">
           <div className="pointer-events-none absolute -left-12 -top-12 h-36 w-36 rounded-full bg-orange-500/10 blur-3xl" />
 
@@ -399,7 +403,6 @@ export default function AccountDetailsPage() {
           </div>
         </section>
 
-        {/* حالة العملية */}
         {status && (
           <div
             className={`mb-5 rounded-2xl border px-4 py-3 text-center text-sm font-bold ${
@@ -414,7 +417,6 @@ export default function AccountDetailsPage() {
           </div>
         )}
 
-        {/* معلومات الحساب */}
         <section className="space-y-4">
           <AccountInfoCard
             label="البريد الإلكتروني"
@@ -478,13 +480,14 @@ export default function AccountDetailsPage() {
             }}
             onSave={saveChanges}
             onCancel={cancelEditing}
-            onDelete={() =>
-              setShowDeleteConfirm(true)
-            }
+            onDelete={() => {
+              setDeleted(false);
+              setStatus("");
+              setShowDeleteConfirm(true);
+            }}
           />
         </section>
 
-        {/* الأمان */}
         <section className="mt-5 flex items-center gap-3 rounded-[22px] border border-white/10 bg-white/[0.025] p-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400">
             <HiOutlineLockClosed size={22} />
@@ -501,9 +504,13 @@ export default function AccountDetailsPage() {
         open={showDeleteConfirm}
         service={account.service}
         accountName={accountName}
-        onCancel={() =>
-          setShowDeleteConfirm(false)
-        }
+        deleting={deleting}
+        deleted={deleted}
+        onCancel={() => {
+          if (deleting || deleted) return;
+
+          setShowDeleteConfirm(false);
+        }}
         onConfirm={deleteAccount}
       />
     </main>

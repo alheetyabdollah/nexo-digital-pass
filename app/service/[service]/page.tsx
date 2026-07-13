@@ -92,7 +92,10 @@ export default function ServicePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
+const [accountToDelete, setAccountToDelete] =
+  useState<Account | null>(null);
 
+const [deleting, setDeleting] = useState(false);
   useEffect(() => {
     async function loadAccounts() {
       if (!cardCode) {
@@ -167,41 +170,44 @@ export default function ServicePage() {
     loadAccounts();
   }, [cardCode, service]);
 
-  const deleteAccount = async (id: string) => {
-    const confirmDelete = confirm(
-      "هل أنت متأكد من حذف هذا الحساب؟"
-    );
+  const deleteAccount = async () => {
+  if (!accountToDelete || deleting) return;
 
-    if (!confirmDelete) return;
+  setDeleting(true);
+  setStatus("جاري حذف الحساب...");
 
-    setStatus("جاري حذف الحساب...");
+  const { error, count } = await supabase
+    .from("accounts")
+    .delete({ count: "exact" })
+    .eq("id", accountToDelete.id);
 
-    const { error, count } = await supabase
-      .from("accounts")
-      .delete({ count: "exact" })
-      .eq("id", id);
+  if (error) {
+    console.error(error);
+    setStatus("حدث خطأ أثناء الحذف");
+    setDeleting(false);
+    return;
+  }
 
-    if (error) {
-      console.error(error);
-      setStatus("حدث خطأ أثناء الحذف");
-      return;
-    }
+  if (count === 0) {
+    setStatus("لم يتم حذف الحساب من قاعدة البيانات");
+    setDeleting(false);
+    return;
+  }
 
-    if (count === 0) {
-      setStatus("لم يتم حذف الحساب من قاعدة البيانات");
-      return;
-    }
+  setAccounts((prev) =>
+    prev.filter(
+      (account) => account.id !== accountToDelete.id
+    )
+  );
 
-    setAccounts((prev) =>
-      prev.filter((account) => account.id !== id)
-    );
+  setAccountToDelete(null);
+  setDeleting(false);
+  setStatus("تم حذف الحساب بنجاح ✅");
 
-    setStatus("تم حذف الحساب بنجاح ✅");
-
-    setTimeout(() => {
-      setStatus("");
-    }, 2500);
-  };
+  setTimeout(() => {
+    setStatus("");
+  }, 2500);
+};
 
   const pageTitle =
     service === "all" ? "كل الحسابات" : service;
@@ -218,11 +224,7 @@ export default function ServicePage() {
         {/* الهيدر */}
         <header className="relative mb-6 flex items-center justify-between">
           <Link
-            href={
-              cardCode
-                ? `/vault?card=${cardCode}`
-                : "/"
-            }
+            href={cardCode ? `/vault?card=${cardCode}` : "/"}
             className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-orange-500/30 hover:text-orange-400 active:scale-95"
             aria-label="الرجوع إلى الخزنة"
           >
@@ -347,7 +349,7 @@ export default function ServicePage() {
           </section>
         ) : (
           /* قائمة الحسابات */
-          <section className="space-y-4">
+          <section className="space-y-5">
             {accounts.map((account) => {
               const mainTitle =
                 account.email ||
@@ -358,23 +360,27 @@ export default function ServicePage() {
               return (
                 <article
                   key={account.id}
-                  className="group relative overflow-hidden rounded-[26px] border border-white/10 bg-gradient-to-br from-white/[0.06] via-white/[0.035] to-orange-500/[0.02] p-4 transition-all duration-300 hover:border-orange-500/35 hover:shadow-[0_0_30px_rgba(255,106,0,0.1)]"
+                  className="group relative overflow-hidden rounded-[30px] border border-white/10 bg-gradient-to-br from-white/[0.075] via-white/[0.04] to-orange-500/[0.025] p-5 shadow-[0_22px_55px_rgba(0,0,0,0.38)] transition duration-300 hover:-translate-y-0.5 hover:border-orange-500/35 hover:shadow-[0_26px_65px_rgba(255,106,0,0.11)]"
                 >
-                  <div className="pointer-events-none absolute -left-10 -top-10 h-28 w-28 rounded-full bg-orange-500/[0.06] blur-3xl" />
+                  <div className="pointer-events-none absolute -left-12 -top-12 h-36 w-36 rounded-full bg-orange-500/[0.07] blur-3xl" />
 
+                  {/* رأس البطاقة */}
                   <div className="relative flex items-start gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/40 transition-transform duration-300 group-hover:scale-105">
-                      {getServiceIcon(account.service)}
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] border border-white/10 bg-black/40 shadow-[0_0_24px_rgba(0,0,0,0.35)] transition duration-300 group-hover:scale-105">
+                      {getServiceIcon(account.service, 38)}
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-orange-400">
+                          <p className="text-sm font-black text-orange-400">
                             {account.service}
                           </p>
 
-                          <h3 className="mt-1 truncate text-lg font-black text-white">
+                          <h3
+                            dir="ltr"
+                            className="mt-1 truncate text-left text-xl font-black text-white"
+                          >
                             {mainTitle}
                           </h3>
                         </div>
@@ -385,66 +391,86 @@ export default function ServicePage() {
                               ? `/account/${account.id}?card=${cardCode}`
                               : `/account/${account.id}`
                           }
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-orange-400 transition hover:bg-orange-500 hover:text-black active:scale-95"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-orange-500/25 bg-orange-500/10 text-orange-400 transition duration-300 hover:bg-orange-500 hover:text-black active:scale-95"
                           aria-label="فتح الحساب"
                         >
-                          <HiOutlineChevronLeft size={21} />
+                          <HiOutlineChevronLeft size={23} />
                         </Link>
-                      </div>
-
-                      <div className="mt-4 space-y-2.5">
-                        {account.email && (
-                          <div className="flex min-w-0 items-center gap-2 text-sm text-white/60">
-                            <HiOutlineEnvelope
-                              size={18}
-                              className="shrink-0 text-orange-400"
-                            />
-
-                            <span
-                              dir="ltr"
-                              className="truncate text-left"
-                            >
-                              {account.email}
-                            </span>
-                          </div>
-                        )}
-
-                        {account.username && (
-                          <div className="flex min-w-0 items-center gap-2 text-sm text-white/60">
-                            <HiOutlineUser
-                              size={18}
-                              className="shrink-0 text-orange-400"
-                            />
-
-                            <span className="truncate">
-                              {account.username}
-                            </span>
-                          </div>
-                        )}
-
-                        {account.phone && (
-                          <div className="flex min-w-0 items-center gap-2 text-sm text-white/60">
-                            <HiOutlinePhone
-                              size={18}
-                              className="shrink-0 text-orange-400"
-                            />
-
-                            <span
-                              dir="ltr"
-                              className="truncate text-left"
-                            >
-                              {account.phone}
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
 
+                  {/* تفاصيل الحساب */}
+                  <div className="relative mt-5 space-y-3 rounded-[22px] border border-white/10 bg-black/20 p-4">
+                    {account.email && (
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
+                          <HiOutlineEnvelope size={19} />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-white/35">
+                            البريد الإلكتروني
+                          </p>
+
+                          <p
+                            dir="ltr"
+                            className="mt-0.5 truncate text-left text-sm font-bold text-white/75"
+                          >
+                            {account.email}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {account.username && (
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
+                          <HiOutlineUser size={19} />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-white/35">
+                            اسم المستخدم
+                          </p>
+
+                          <p
+                            dir="ltr"
+                            className="mt-0.5 truncate text-left text-sm font-bold text-white/75"
+                          >
+                            {account.username}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {account.phone && (
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
+                          <HiOutlinePhone size={19} />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-white/35">
+                            رقم الهاتف
+                          </p>
+
+                          <p
+                            dir="ltr"
+                            className="mt-0.5 truncate text-left text-sm font-bold text-white/75"
+                          >
+                            {account.phone}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* أسفل البطاقة */}
                   <div className="relative mt-4 flex items-center justify-between border-t border-white/10 pt-4">
                     <div className="flex items-center gap-2 text-xs text-white/40">
                       <HiOutlineCalendarDays
-                        size={17}
+                        size={18}
                         className="text-orange-400"
                       />
 
@@ -452,13 +478,13 @@ export default function ServicePage() {
                     </div>
 
                     <button
-                      type="button"
-                      onClick={() => deleteAccount(account.id)}
-                      className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500 hover:text-white active:scale-95"
-                    >
-                      <HiOutlineTrash size={17} />
-                      حذف
-                    </button>
+  type="button"
+  onClick={() => setAccountToDelete(account)}
+  className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3 py-2 text-xs font-bold text-red-300 transition duration-300 hover:border-red-500/40 hover:bg-red-500/15 active:scale-95"
+>
+  <HiOutlineTrash size={17} />
+  حذف
+</button>
                   </div>
                 </article>
               );
@@ -466,6 +492,65 @@ export default function ServicePage() {
           </section>
         )}
       </div>
+      {accountToDelete && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+    <div className="w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-[#111111] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.65)]">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/10 text-red-300">
+        <HiOutlineTrash size={30} />
+      </div>
+
+      <div className="mt-5 text-center">
+        <h3 className="text-xl font-black text-white">
+          حذف الحساب؟
+        </h3>
+
+        <p className="mt-3 text-sm leading-7 text-white/50">
+          سيتم حذف حساب
+          <span
+            dir="ltr"
+            className="mx-1 inline-block font-bold text-white/80"
+          >
+            {accountToDelete.email ||
+              accountToDelete.username ||
+              accountToDelete.phone ||
+              accountToDelete.service}
+          </span>
+          نهائيًا، ولا يمكن استرجاعه بعد الحذف.
+        </p>
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setAccountToDelete(null)}
+          disabled={deleting}
+          className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-black text-white/70 transition hover:bg-white/[0.09] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          إلغاء
+        </button>
+
+        <button
+          type="button"
+          onClick={deleteAccount}
+          disabled={deleting}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/15 px-4 py-3 text-sm font-black text-red-300 transition hover:bg-red-500/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {deleting ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200/20 border-t-red-200" />
+              جاري الحذف...
+            </>
+          ) : (
+            <>
+              <HiOutlineTrash size={18} />
+              حذف الحساب
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </main>
   );
 }
