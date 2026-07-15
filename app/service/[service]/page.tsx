@@ -1,10 +1,10 @@
 "use client";
-
+import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { decryptText } from "@/lib/accountRules";
+
 
 import {
   FaApple,
@@ -88,7 +88,11 @@ export default function ServicePage() {
 
   const service = decodeURIComponent(params.service as string);
   const cardCode = searchParams.get("card");
-
+const {
+  isUnlocked,
+  matchesCard,
+  decryptText,
+} = useVaultSession();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
@@ -103,18 +107,18 @@ const [deleting, setDeleting] = useState(false);
         return;
       }
 
-      const unlocked = localStorage.getItem(
-        `nexo_unlocked_${cardCode}`
-      );
+      const cleanedCardCode = cardCode.trim();
 
-      const vaultPassword = sessionStorage.getItem(
-        `nexo_vault_password_${cardCode}`
-      );
+if (
+  !isUnlocked ||
+  !matchesCard(cleanedCardCode)
+) {
+  window.location.href = `/unlock?card=${encodeURIComponent(
+    cleanedCardCode
+  )}`;
 
-      if (!unlocked || !vaultPassword) {
-        window.location.href = `/unlock?card=${cardCode}`;
-        return;
-      }
+  return;
+}
 
       const { data: card } = await supabase
         .from("cards")
@@ -145,7 +149,10 @@ const [deleting, setDeleting] = useState(false);
         if (!value) return null;
 
         try {
-          return await decryptText(value, vaultPassword);
+          return await decryptText(
+  value,
+  cleanedCardCode
+);
         } catch {
           return "تعذر فك التشفير";
         }
@@ -168,7 +175,13 @@ const [deleting, setDeleting] = useState(false);
     }
 
     loadAccounts();
-  }, [cardCode, service]);
+  }, [
+  cardCode,
+  service,
+  isUnlocked,
+  matchesCard,
+  decryptText,
+]);
 
   const deleteAccount = async () => {
   if (!accountToDelete || deleting) return;

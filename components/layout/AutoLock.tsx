@@ -1,72 +1,182 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
 
-const AUTO_LOCK_MINUTES = 5;
+import { useVaultSession } from "@/components/providers/VaultSessionProvider";
+
+const AUTO_LOCK_MINUTES = 10;
+
+const PROTECTED_PATHS = [
+  "/vault",
+  "/service",
+  "/account",
+  "/apple",
+  "/google",
+  "/instagram",
+  "/facebook",
+  "/whatsapp",
+  "/telegram",
+  "/tiktok",
+  "/other",
+];
+
+function isProtectedPath(pathname: string) {
+  return PROTECTED_PATHS.some((path) =>
+    pathname.startsWith(path)
+  );
+}
+
+function clearLegacySession(cardCode?: string | null) {
+  if (cardCode) {
+    localStorage.removeItem(
+      `nexo_unlocked_${cardCode}`
+    );
+
+    sessionStorage.removeItem(
+      `nexo_unlocked_${cardCode}`
+    );
+
+    sessionStorage.removeItem(
+      `nexo_vault_password_${cardCode}`
+    );
+  }
+
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith("nexo_unlocked_")) {
+      localStorage.removeItem(key);
+    }
+  });
+
+  Object.keys(sessionStorage).forEach((key) => {
+    if (
+      key.startsWith("nexo_unlocked_") ||
+      key.startsWith("nexo_vault_password_")
+    ) {
+      sessionStorage.removeItem(key);
+    }
+  });
+}
 
 export default function AutoLock() {
   const router = useRouter();
   const pathname = usePathname();
 
+  const {
+    cardCode,
+    isUnlocked,
+    lockSession,
+  } = useVaultSession();
+
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
+    if (
+      !isUnlocked ||
+      !isProtectedPath(pathname)
+    ) {
+      return;
+    }
 
-    const startTimer = () => {
-      if (timer) clearTimeout(timer);
+    let timer: ReturnType<
+      typeof setTimeout
+    > | null = null;
 
-      timer = setTimeout(() => {
-        Object.keys(sessionStorage).forEach((key) => {
-          if (key.startsWith("nexo_vault_password_")) {
-            sessionStorage.removeItem(key);
-          }
-        });
+    const lockVault = () => {
+      const lastCard =
+        cardCode ||
+        sessionStorage.getItem(
+          "nexo_last_card"
+        );
 
-        Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith("nexo_unlocked_")) {
-            localStorage.removeItem(key);
-          }
-        });
+      lockSession();
+      clearLegacySession(lastCard);
 
-        const lastCard = sessionStorage.getItem("nexo_last_card");
-
-        if (
-          lastCard &&
-          (
-            pathname.startsWith("/vault") ||
-            pathname.startsWith("/service") ||
-            pathname.startsWith("/account") ||
-            pathname.startsWith("/apple") ||
-            pathname.startsWith("/google") ||
-            pathname.startsWith("/instagram") ||
-            pathname.startsWith("/facebook") ||
-            pathname.startsWith("/whatsapp") ||
-            pathname.startsWith("/telegram") ||
-            pathname.startsWith("/tiktok") ||
-            pathname.startsWith("/other")
-          )
-        ) {
-          router.push(`/unlock?card=${lastCard}`);
-        }
-      }, AUTO_LOCK_MINUTES * 60 * 1000);
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        startTimer();
+      if (lastCard) {
+        router.replace(
+          `/unlock?card=${encodeURIComponent(
+            lastCard
+          )}`
+        );
       } else {
-        if (timer) clearTimeout(timer);
+        router.replace("/");
       }
     };
 
-    document.addEventListener("visibilitychange", handleVisibility);
+    const resetTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+
+      timer = setTimeout(
+        lockVault,
+        AUTO_LOCK_MINUTES * 60 * 1000
+      );
+    };
+
+    const activityEvents = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "scroll",
+    ] as const;
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(
+        eventName,
+        resetTimer,
+        { passive: true }
+      );
+    });
+
+    /*
+     * عند إخفاء الصفحة لا نوقف المؤقت.
+     * بذلك تستمر مدة القفل أثناء انتقال
+     * المستخدم إلى تطبيق آخر.
+     */
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible"
+      ) {
+        resetTimer();
+      }
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    resetTimer();
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
+      if (timer) {
+        clearTimeout(timer);
+      }
 
-      if (timer) clearTimeout(timer);
+      activityEvents.forEach(
+        (eventName) => {
+          window.removeEventListener(
+            eventName,
+            resetTimer
+          );
+        }
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
     };
-  }, [pathname, router]);
+  }, [
+    cardCode,
+    isUnlocked,
+    lockSession,
+    pathname,
+    router,
+  ]);
 
   return null;
 }

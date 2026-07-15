@@ -2,87 +2,208 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+
 import { supabase } from "@/lib/supabase";
-
-async function hashText(text: string) {
-  const data = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { CRYPTO_VERSION } from "@/lib/crypto/aes";
+import {
+  deriveWrappingKey,
+  KDF_ALGORITHM,
+} from "@/lib/crypto/kdf";
+import { decryptVaultKey } from "@/lib/crypto/vault";
+import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 
 type UnlockPageProps = {
   cardCode: string | null;
 };
 
-export default function UnlockPage({ cardCode }: UnlockPageProps) {
+type UnlockCard = {
+  status: string;
+  crypto_version: number | null;
+  kdf_algorithm: string | null;
+  encrypted_vault_key: string | null;
+  password_salt: string | null;
+  password_iterations: number | null;
+};
+
+export default function UnlockPage({
+  cardCode,
+}: UnlockPageProps) {
   const router = useRouter();
+  const { openSession } = useVaultSession();
 
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] =
+    useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
 
   const unlockVault = async () => {
     if (isLoading) return;
 
-    if (!cardCode) {
+    const cleanedCardCode = cardCode?.trim();
+
+    if (!cleanedCardCode) {
       setStatus("البطاقة غير موجودة");
       return;
     }
 
-    if (!password.trim()) {
-      setStatus("أدخل كلمة المرور أولاً");
+    if (!password) {
+      setStatus("أدخل كلمة المرور أولًا");
       return;
     }
-
-    localStorage.removeItem(`nexo_unlocked_${cardCode}`);
-    sessionStorage.removeItem(`nexo_unlocked_${cardCode}`);
-    sessionStorage.removeItem(`nexo_vault_password_${cardCode}`);
 
     setIsLoading(true);
     setStatus("جاري التحقق...");
 
     try {
-      const passwordHash = await hashText(password);
-
       const { data, error } = await supabase
         .from("cards")
-        .select("card_password_hash")
-        .eq("card_code", cardCode)
-        .single();
+        .select(
+          [
+            "status",
+            "crypto_version",
+            "kdf_algorithm",
+            "encrypted_vault_key",
+            "password_salt",
+            "password_iterations",
+          ].join(",")
+        )
+        .eq("card_code", cleanedCardCode)
+        .maybeSingle<UnlockCard>();
 
-      if (error || !data) {
+      if (error) {
+        console.error(error);
+        setStatus(
+          "حدث خطأ أثناء التحقق من البطاقة"
+        );
+        return;
+      }
+
+      if (!data) {
         setStatus("تعذر العثور على البطاقة");
         return;
       }
 
-      if (passwordHash !== data.card_password_hash) {
-        setStatus("كلمة المرور غير صحيحة");
+      if (data.status === "Locked") {
+        setStatus(
+          "هذه البطاقة مقفلة حاليًا"
+        );
         return;
       }
 
-      localStorage.setItem(`nexo_unlocked_${cardCode}`, "true");
-      sessionStorage.setItem(`nexo_unlocked_${cardCode}`, "true");
+      if (data.status !== "Activated") {
+        setStatus(
+          "هذه البطاقة غير مفعلة بعد"
+        );
+        return;
+      }
+
+      if (
+        data.crypto_version !==
+        CRYPTO_VERSION
+      ) {
+        setStatus(
+          "إصدار تشفير هذه البطاقة غير مدعوم"
+        );
+        return;
+      }
+
+      if (
+        data.kdf_algorithm !== KDF_ALGORITHM
+      ) {
+        setStatus(
+          "خوارزمية حماية البطاقة غير مدعومة"
+        );
+        return;
+      }
+
+      if (
+        !data.encrypted_vault_key ||
+        !data.password_salt ||
+        !data.password_iterations
+      ) {
+        setStatus(
+          "بيانات حماية البطاقة غير مكتملة"
+        );
+        return;
+      }
+
+      const wrappingKey =
+        await deriveWrappingKey({
+          secret: password,
+          salt: data.password_salt,
+          iterations:
+            data.password_iterations,
+        });
+
+      let vaultKeyBytes: Uint8Array;
+
+      try {
+        vaultKeyBytes =
+          await decryptVaultKey(
+            data.encrypted_vault_key,
+            wrappingKey
+          );
+      } catch (error) {
+        console.error(error);
+        setStatus(
+          "كلمة المرور غير صحيحة"
+        );
+        return;
+      }
+
+      await openSession({
+        cardCode: cleanedCardCode,
+        vaultKeyBytes,
+      });
+
+      /*
+       * تنظيف آثار النظام القديم.
+       * لا يتم تخزين كلمة المرور أو Vault Key
+       * داخل LocalStorage أو SessionStorage.
+       */
+      localStorage.removeItem(
+        `nexo_unlocked_${cleanedCardCode}`
+      );
+
+      sessionStorage.removeItem(
+        `nexo_unlocked_${cleanedCardCode}`
+      );
+
+      sessionStorage.removeItem(
+        `nexo_vault_password_${cleanedCardCode}`
+      );
+
+      /*
+       * رقم البطاقة ليس سرًا، ويستخدم فقط
+       * لمعرفة صفحة Unlock عند القفل التلقائي.
+       */
       sessionStorage.setItem(
-        `nexo_vault_password_${cardCode}`,
-        password
+        "nexo_last_card",
+        cleanedCardCode
       );
 
       setPassword("");
       setStatus("");
 
-      router.push(`/vault?card=${cardCode}`);
-    } catch {
-      setStatus("حدث خطأ أثناء فتح الخزنة");
+      router.replace(
+        `/vault?card=${encodeURIComponent(
+          cleanedCardCode
+        )}`
+      );
+    } catch (error) {
+      console.error(error);
+      setStatus(
+        "حدث خطأ أثناء فتح الخزنة"
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isChecking = status === "جاري التحقق...";
+  const isChecking =
+    status === "جاري التحقق...";
 
   return (
     <main
@@ -194,8 +315,8 @@ export default function UnlockPage({ cardCode }: UnlockPageProps) {
                   </h2>
 
                   <p className="mx-auto mt-3 max-w-xs text-sm leading-7 text-white/45">
-                    أدخل كلمة مرور البطاقة للوصول إلى حساباتك وبياناتك
-                    المشفرة.
+                    أدخل كلمة مرور البطاقة للوصول
+                    إلى حساباتك وبياناتك المشفرة.
                   </p>
                 </div>
 
@@ -221,16 +342,24 @@ export default function UnlockPage({ cardCode }: UnlockPageProps) {
 
                   <div className="relative">
                     <input
-                      type={showPassword ? "text" : "password"}
+                      type={
+                        showPassword
+                          ? "text"
+                          : "password"
+                      }
                       value={password}
                       disabled={isLoading}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
+                      onChange={(event) => {
+                        setPassword(
+                          event.target.value
+                        );
                         setStatus("");
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          unlockVault();
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Enter"
+                        ) {
+                          void unlockVault();
                         }
                       }}
                       placeholder="أدخل كلمة المرور"
@@ -240,7 +369,11 @@ export default function UnlockPage({ cardCode }: UnlockPageProps) {
 
                     <button
                       type="button"
-                      onClick={() => setShowPassword((value) => !value)}
+                      onClick={() =>
+                        setShowPassword(
+                          (value) => !value
+                        )
+                      }
                       disabled={isLoading}
                       aria-label={
                         showPassword
@@ -322,7 +455,9 @@ export default function UnlockPage({ cardCode }: UnlockPageProps) {
 
                 <button
                   type="button"
-                  onClick={unlockVault}
+                  onClick={() =>
+                    void unlockVault()
+                  }
                   disabled={isLoading}
                   className="group mt-6 flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-l from-[#ff6500] to-[#ff7a00] text-base font-black text-white shadow-[0_18px_40px_rgba(255,106,0,0.28)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_50px_rgba(255,106,0,0.38)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -358,7 +493,21 @@ export default function UnlockPage({ cardCode }: UnlockPageProps) {
                     </>
                   )}
                 </button>
-
+<div className="mt-5 text-center">
+  <button
+    type="button"
+    onClick={() =>
+      router.push(
+        `/recovery?card=${encodeURIComponent(
+          cardCode || ""
+        )}`
+      )
+    }
+    className="text-sm font-bold text-orange-400 transition hover:text-orange-300"
+  >
+    نسيت كلمة المرور؟
+  </button>
+</div>
                 <div className="mt-6 flex items-center justify-center gap-2 text-xs text-white/30">
                   <svg
                     viewBox="0 0 24 24"
@@ -381,13 +530,16 @@ export default function UnlockPage({ cardCode }: UnlockPageProps) {
                     />
                   </svg>
 
-                  <span>بياناتك مشفرة وخاصة بك وحدك</span>
+                  <span>
+                    بياناتك مشفرة وخاصة بك وحدك
+                  </span>
                 </div>
               </div>
             </div>
 
             <p className="mt-6 text-center text-[11px] text-white/20">
-              حتى فريق NEXO لا يستطيع الاطلاع على محتوى خزنتك
+              حتى فريق NEXO لا يستطيع الاطلاع على
+              محتوى خزنتك
             </p>
           </div>
         </div>

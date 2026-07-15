@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+
 import AutoLock from "@/components/layout/AutoLock";
+import VaultSessionProvider from "@/components/providers/VaultSessionProvider";
 
 export const metadata: Metadata = {
   title: "NEXO Digital Pass",
@@ -14,14 +16,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="ar"
-      dir="rtl"
-      data-scroll-behavior="smooth"
-    >
+    <html lang="ar" dir="rtl">
       <body>
-        <AutoLock />
-        {children}
+        <VaultSessionProvider>
+          <AutoLock />
+          {children}
+        </VaultSessionProvider>
       </body>
     </html>
   );

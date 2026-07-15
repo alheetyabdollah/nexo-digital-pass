@@ -9,11 +9,9 @@ import {
 } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
-import {
-  decryptText,
-  encryptText,
-  hashText,
-} from "@/lib/accountRules";
+import { hashText } from "@/lib/accountRules";
+
+import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 
 import AccountInfoCard from "@/components/account/AccountInfoCard";
 import PasswordSection from "@/components/account/PasswordSection";
@@ -100,6 +98,12 @@ export default function AccountDetailsPage() {
   const searchParams = useSearchParams();
 
   const cardCode = searchParams.get("card");
+  const {
+  isUnlocked,
+  matchesCard,
+  decryptText,
+  encryptText,
+} = useVaultSession();
   const id = params.id as string;
 
   const [account, setAccount] = useState<Account | null>(null);
@@ -117,81 +121,177 @@ export default function AccountDetailsPage() {
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    async function loadAccount() {
-      if (!cardCode) {
-        router.push("/");
-        return;
-      }
+  let cancelled = false;
 
-      const unlocked = localStorage.getItem(
-        `nexo_unlocked_${cardCode}`
+  async function loadAccount() {
+    const cleanedCardCode =
+      cardCode?.trim();
+
+    if (!cleanedCardCode) {
+      router.replace("/");
+      return;
+    }
+
+    if (
+      !isUnlocked ||
+      !matchesCard(cleanedCardCode)
+    ) {
+      router.replace(
+        `/unlock?card=${encodeURIComponent(
+          cleanedCardCode
+        )}`
       );
 
-      const vaultPassword = sessionStorage.getItem(
-        `nexo_vault_password_${cardCode}`
-      );
+      return;
+    }
 
-      if (!unlocked || !vaultPassword) {
-        router.push(`/unlock?card=${cardCode}`);
-        return;
-      }
-
-      const { data: card } = await supabase
+    try {
+      const {
+        data: card,
+        error: cardError,
+      } = await supabase
         .from("cards")
-        .select("id")
-        .eq("card_code", cardCode)
-        .single();
+        .select("id, status, crypto_version")
+        .eq(
+          "card_code",
+          cleanedCardCode
+        )
+        .maybeSingle();
 
-      if (!card) {
-        router.push(`/card/${cardCode}`);
+      if (cancelled) return;
+
+      if (
+        cardError ||
+        !card ||
+        card.status !== "Activated" ||
+        card.crypto_version !== 2
+      ) {
+        router.replace(
+          `/card/${encodeURIComponent(
+            cleanedCardCode
+          )}`
+        );
+
         return;
       }
 
-      const { data } = await supabase
+      const {
+        data,
+        error: accountError,
+      } = await supabase
         .from("accounts")
         .select("*")
         .eq("id", id)
         .eq("card_id", card.id)
-        .single();
+        .maybeSingle();
 
-      if (!data) {
-        router.push(`/service/all?card=${cardCode}`);
+      if (cancelled) return;
+
+      if (accountError || !data) {
+        router.replace(
+          `/service/all?card=${encodeURIComponent(
+            cleanedCardCode
+          )}`
+        );
+
         return;
       }
 
-      const decryptField = async (
-        value: string | null
-      ) => {
-        if (!value) return null;
+      const [
+        email,
+        username,
+        password,
+        phone,
+        recovery,
+        notes,
+      ] = await Promise.all([
+        data.email
+          ? decryptText(
+              data.email,
+              cleanedCardCode
+            )
+          : null,
 
-        try {
-          return await decryptText(
-            value,
-            vaultPassword
-          );
-        } catch (error) {
-          console.error(error);
-          return "تعذر فك التشفير";
-        }
-      };
+        data.username
+          ? decryptText(
+              data.username,
+              cleanedCardCode
+            )
+          : null,
+
+        data.password
+          ? decryptText(
+              data.password,
+              cleanedCardCode
+            )
+          : null,
+
+        data.phone
+          ? decryptText(
+              data.phone,
+              cleanedCardCode
+            )
+          : null,
+
+        data.recovery
+          ? decryptText(
+              data.recovery,
+              cleanedCardCode
+            )
+          : null,
+
+        data.notes
+          ? decryptText(
+              data.notes,
+              cleanedCardCode
+            )
+          : null,
+      ]);
+
+      if (cancelled) return;
 
       const decryptedAccount: Account = {
         ...data,
-        email: await decryptField(data.email),
-        username: await decryptField(data.username),
-        password: await decryptField(data.password),
-        phone: await decryptField(data.phone),
-        recovery: await decryptField(data.recovery),
-        notes: await decryptField(data.notes),
+        email,
+        username,
+        password,
+        phone,
+        recovery,
+        notes,
       };
 
       setAccount(decryptedAccount);
-      setOriginalAccount(decryptedAccount);
-      setLoading(false);
-    }
+      setOriginalAccount({
+        ...decryptedAccount,
+      });
+    } catch (error) {
+      console.error(error);
 
-    loadAccount();
-  }, [id, cardCode, router]);
+      if (!cancelled) {
+        setStatus(
+          "تعذر فك تشفير معلومات الحساب"
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    }
+  }
+
+  void loadAccount();
+
+  return () => {
+    cancelled = true;
+  };
+}, [
+  id,
+  cardCode,
+  isUnlocked,
+  matchesCard,
+  decryptText,
+  router,
+]);
 
   const updateField = (
     field: keyof Account,
@@ -224,25 +324,41 @@ export default function AccountDetailsPage() {
       return;
     }
 
-    const vaultPassword = sessionStorage.getItem(
-      `nexo_vault_password_${cardCode}`
-    );
+    const cleanedCardCode =
+  cardCode?.trim();
 
-    if (!vaultPassword) {
-      setStatus("انتهت جلسة الخزنة");
-      return;
-    }
+if (!cleanedCardCode) {
+  setStatus("لم يتم العثور على البطاقة");
+  return;
+}
 
-    const encryptField = async (
-      value: string | null
-    ) => {
-      if (!value?.trim()) return null;
+if (
+  !isUnlocked ||
+  !matchesCard(cleanedCardCode)
+) {
+  setStatus("انتهت جلسة الخزنة");
 
-      return encryptText(
-        value.trim(),
-        vaultPassword
-      );
-    };
+  router.replace(
+    `/unlock?card=${encodeURIComponent(
+      cleanedCardCode
+    )}`
+  );
+
+  return;
+}
+
+const encryptField = async (
+  value: string | null
+) => {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  return encryptText(
+    value.trim(),
+    cleanedCardCode
+  );
+};
 
     const cleanEmail =
       account.email?.trim().toLowerCase() || "";

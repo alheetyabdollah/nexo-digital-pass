@@ -1,18 +1,18 @@
-import SettingsClient from "./SettingsClient";
+import RecoveryClient from "./RecoveryClient";
 
-type SettingsPageProps = {
+type RecoveryPageProps = {
   searchParams: Promise<{
     card?: string;
   }>;
 };
 
-export default async function SettingsPage({
+export default async function RecoveryPage({
   searchParams,
-}: SettingsPageProps) {
+}: RecoveryPageProps) {
   const params = await searchParams;
 
   return (
-    <SettingsClient
+    <RecoveryClient
       cardCode={params.card ?? null}
     />
   );
