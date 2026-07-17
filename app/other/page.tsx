@@ -12,9 +12,14 @@ export default async function OtherPage({
     <AccountServicePage
       service="Other"
       title="حساب آخر"
-      description="إدارة أي حساب آخر بأمان"
-      emailPlaceholder="اسم الحساب أو البريد الإلكتروني"
-      icon={<HiOutlineSquares2X2 size={58} className="text-orange-400" />}
+      description="أضف أي حساب غير موجود ضمن الخدمات الأساسية، مثل Netflix أو Xbox أو Steam أو أي خدمة أخرى."
+      emailPlaceholder="مثال: Netflix أو Xbox أو Steam"
+      icon={
+        <HiOutlineSquares2X2
+          size={58}
+          className="text-orange-400"
+        />
+      }
       cardCode={card || null}
     />
   );

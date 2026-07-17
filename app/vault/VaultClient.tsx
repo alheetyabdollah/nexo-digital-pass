@@ -1,5 +1,5 @@
 "use client";
-
+import BottomNavigation from "@/components/layout/BottomNavigation";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -30,9 +30,9 @@ import {
 import {
   HiOutlineArrowLeft,
   HiOutlineClock,
-  HiOutlineCog6Tooth,
+  
   HiOutlineCube,
-  HiOutlineInformationCircle,
+  
   HiOutlineLockClosed,
   HiOutlinePlus,
   HiOutlineShieldCheck,
@@ -364,8 +364,10 @@ export default function VaultClient() {
       dir="rtl"
       className="min-h-screen overflow-x-hidden bg-[#020202] text-white"
     >
-      <div className="relative mx-auto min-h-screen w-full max-w-[540px] overflow-hidden border-x border-white/10 bg-[#050505] pb-32 shadow-[0_0_100px_rgba(0,0,0,0.95)]">
-        {/* إضاءة الخلفية */}
+<div
+  id="vault-top"
+  className="relative mx-auto min-h-screen w-full max-w-[540px] overflow-hidden border-x border-white/10 bg-[#050505] pb-32 shadow-[0_0_100px_rgba(0,0,0,0.95)]"
+>        {/* إضاءة الخلفية */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_78%_7%,rgba(255,106,0,0.17),transparent_24%),radial-gradient(circle_at_15%_45%,rgba(255,106,0,0.06),transparent_28%)]" />
 
         {/* شبكة الخلفية */}
@@ -750,97 +752,7 @@ export default function VaultClient() {
         </div>
 
         {/* الشريط السفلي */}
-<nav
-  dir="rtl"
-  className="fixed bottom-0 left-1/2 z-50 flex h-[94px] w-full max-w-[540px] -translate-x-1/2 items-center justify-around rounded-t-[30px] border border-white/10 bg-[#0a0a0a]/95 px-3 pb-3 pt-3 shadow-[0_-20px_55px_rgba(0,0,0,0.75)] backdrop-blur-2xl"
->
-  {/* الإعدادات */}
-  <Link
-    href={
-      cardCode
-        ? `/settings?card=${encodeURIComponent(cardCode)}`
-        : "/settings"
-    }
-    className="flex min-w-[58px] flex-col items-center gap-1.5 text-white/55 transition hover:text-orange-400 active:scale-95"
-  >
-    <HiOutlineCog6Tooth size={27} />
-
-    <span className="text-[11px] font-bold">
-      الإعدادات
-    </span>
-  </Link>
-
-  {/* مؤشر الحماية — ليس زرًا */}
-  <div
-    aria-label="الخزنة محمية"
-    className="flex min-w-[58px] cursor-default flex-col items-center gap-1.5 text-green-400"
-  >
-    <div className="relative flex h-7 w-7 items-center justify-center">
-      <span className="absolute h-7 w-7 animate-ping rounded-full bg-green-400/15" />
-
-      <HiOutlineShieldCheck
-        size={28}
-        className="relative drop-shadow-[0_0_8px_rgba(74,222,128,0.65)]"
-      />
-    </div>
-
-    <span className="text-[11px] font-bold">
-      محمية
-    </span>
-  </div>
-
-  {/* إضافة حساب */}
-  <Link
-    href="#accounts"
-    aria-label="إضافة حساب"
-    className="-mt-12 flex min-w-[76px] flex-col items-center"
-  >
-    <div className="group relative flex h-[72px] w-[72px] items-center justify-center rounded-full border-[5px] border-[#0a0a0a] bg-gradient-to-br from-[#ff8a00] to-[#ff5f00] text-white shadow-[0_0_34px_rgba(255,106,0,0.5)] transition duration-300 hover:scale-105 active:scale-95">
-      <div className="pointer-events-none absolute inset-1 rounded-full border border-white/20" />
-
-      <HiOutlinePlus
-        size={38}
-        className="relative z-10 transition duration-300 group-hover:rotate-90"
-      />
-    </div>
-
-    <span className="mt-1 text-[11px] font-black text-orange-500">
-      إضافة حساب
-    </span>
-  </Link>
-
-  {/* عن NEXO */}
-  <Link
-    href={
-      cardCode
-        ? `/about?card=${encodeURIComponent(cardCode)}`
-        : "/about"
-    }
-    className="flex min-w-[58px] flex-col items-center gap-1.5 text-white/55 transition hover:text-orange-400 active:scale-95"
-  >
-    <HiOutlineInformationCircle size={28} />
-
-    <span className="text-[11px] font-bold">
-      عن NEXO
-    </span>
-  </Link>
-
-  {/* بطاقتي */}
-  <Link
-    href={
-      cardCode
-        ? `/my-card?card=${encodeURIComponent(cardCode)}`
-        : "/my-card"
-    }
-    className="flex min-w-[58px] flex-col items-center gap-1.5 text-white/55 transition hover:text-orange-400 active:scale-95"
-  >
-    <HiOutlineUser size={29} />
-
-    <span className="text-[11px] font-bold">
-      بطاقتي
-    </span>
-  </Link>
-</nav>
+<BottomNavigation cardCode={cardCode} />
       </div>
     </main>
   );
