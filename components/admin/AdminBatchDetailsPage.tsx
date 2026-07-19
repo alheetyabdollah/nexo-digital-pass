@@ -209,7 +209,26 @@ export default function AdminBatchDetailsPage() {
             )
       );
     }, [cards, search]);
+  const activatedCards = useMemo(
+    () =>
+      cards.filter(
+        (card) =>
+          card.status === "Activated"
+      ).length,
+    [cards]
+  );
 
+  const inactiveCards =
+    cards.length - activatedCards;
+
+  const activationRate =
+    cards.length === 0
+      ? 0
+      : Math.round(
+          (activatedCards /
+            cards.length) *
+            100
+        );
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#070707] text-white">
@@ -333,12 +352,84 @@ export default function AdminBatchDetailsPage() {
                 )}/print`}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-[20px] bg-orange-500 px-5 py-4 text-sm font-black text-black transition hover:bg-orange-400 active:scale-[0.98]"
               >
-                <HiOutlinePrinter
-                  size={22}
-                />
-
+                <HiOutlinePrinter size={22} />
                 تحميل ملف الطباعة PDF
               </a>
+<a
+  href={`/api/admin/batches/${encodeURIComponent(
+    batch.id
+  )}/csv`}
+  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[20px] border border-orange-500/30 bg-orange-500/10 px-5 py-4 text-sm font-black text-orange-300 transition hover:bg-orange-500/15 active:scale-[0.98]"
+>
+  📄 تصدير بطاقات الدفعة CSV
+</a>
+              <section className="mt-5 rounded-[28px] border border-white/10 bg-[#101010] p-5">
+                <p className="text-xs font-bold tracking-[0.16em] text-orange-400">
+                  STATISTICS
+                </p>
+
+                <h2 className="mt-2 text-xl font-black">
+                  إحصائيات الدفعة
+                </h2>
+
+                <div className="mt-5 grid grid-cols-2 gap-4">
+                  <div className="rounded-2xl bg-white/[0.03] p-4">
+                    <p className="text-xs text-white/45">
+                      المفعلة
+                    </p>
+
+                    <p className="mt-2 text-2xl font-black text-green-400">
+                      {activatedCards}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/[0.03] p-4">
+                    <p className="text-xs text-white/45">
+                      غير المفعلة
+                    </p>
+
+                    <p className="mt-2 text-2xl font-black text-yellow-400">
+                      {inactiveCards}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/[0.03] p-4">
+                    <p className="text-xs text-white/45">
+                      إجمالي البطاقات
+                    </p>
+
+                    <p className="mt-2 text-2xl font-black">
+                      {cards.length}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/[0.03] p-4">
+                    <p className="text-xs text-white/45">
+                      نسبة التفعيل
+                    </p>
+
+                    <p className="mt-2 text-2xl font-black text-orange-400">
+                      {activationRate}%
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="mb-2 flex justify-between text-xs font-bold text-white/45">
+                    <span>التفعيل</span>
+                    <span>{activationRate}%</span>
+                  </div>
+
+                  <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-orange-500 transition-all duration-700"
+                      style={{
+                        width: `${activationRate}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </section>
 
               <section className="mt-7">
                 <div className="mb-4 flex items-end justify-between">

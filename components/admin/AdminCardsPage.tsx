@@ -625,9 +625,78 @@ export default function AdminCardsPage() {
                   </p>
                 </div>
               </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/admin/batches")
+                }
+                disabled={
+                  creatingCard ||
+                  creatingBatch
+                }
+                className="col-span-2 flex items-center gap-3 rounded-[24px] border border-orange-500/20 bg-gradient-to-br from-orange-500/[0.10] to-white/[0.025] p-4 text-right transition hover:border-orange-500/40 hover:bg-orange-500/[0.14] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500/15 text-orange-400">
+                  <HiOutlineRectangleStack
+                    size={27}
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-black">
+                    دفعات البطاقات
+                  </p>
+
+                  <p className="mt-1 text-[11px] text-white/40">
+                    عرض وإدارة جميع الدفعات
+                  </p>
+                </div>
+
+                <span className="text-xl text-orange-400/70">
+                  ←
+                </span>
+              </button>
             </div>
           </section>
+<button
+  type="button"
+  onClick={() => router.push("/admin")}
+  className="mt-3 flex w-full items-center justify-between rounded-[22px] border border-white/10 bg-white/[0.035] px-5 py-4 transition hover:border-orange-500/30 hover:bg-orange-500/[0.05]"
+>
+  <div className="min-w-0 flex-1">
+    <p className="text-sm font-black">
+      الإحصائيات
+    </p>
 
+    <p className="mt-1 text-[11px] text-white/40">
+      لوحة الإحصائيات الرئيسية
+    </p>
+  </div>
+
+  <span className="text-xl text-orange-400/70">
+    ←
+  </span>
+</button>
+<button
+  type="button"
+  onClick={() => router.push("/admin/security")}
+  className="mt-3 flex w-full items-center justify-between rounded-[22px] border border-orange-500/20 bg-orange-500/[0.05] px-5 py-4 transition hover:border-orange-500/40 hover:bg-orange-500/[0.10]"
+>
+  <div className="min-w-0 flex-1">
+    <p className="text-sm font-black">
+      إعدادات الأمان
+    </p>
+
+    <p className="mt-1 text-[11px] text-white/40">
+      إدارة المصادقة الثنائية وإعدادات الحماية
+    </p>
+  </div>
+
+  <span className="text-xl text-orange-400/70">
+    🛡️
+  </span>
+</button>
           {/* البحث */}
           <section className="mt-7">
             <div className="mb-4 flex items-end justify-between">

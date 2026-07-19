@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createClient } from "@supabase/supabase-js";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFPage, rgb } from "pdf-lib";
 import QRCode from "qrcode";
+import fs from "fs/promises";
+import path from "path";
 
 type RouteContext = {
   params: Promise<{
@@ -29,6 +31,50 @@ const SITE_ORIGIN =
   process.env.NEXT_PUBLIC_SITE_URL ||
   "https://nexo-digital-pass.vercel.app";
 
+// =====================================================
+// NEXO PRINT SETTINGS — جميع القياسات بالمليمتر
+// =====================================================
+
+// ورقة الطباعة: عرض 200 × ارتفاع 300 ملم
+const SHEET_WIDTH_MM = 200;
+const SHEET_HEIGHT_MM = 300;
+
+// تصميم البطاقة بعد زيادة مساحة النزف: 93 × 60 ملم
+const CARD_WIDTH_MM = 93;
+const CARD_HEIGHT_MM = 60;
+
+// الترتيب: عمودان × خمسة صفوف = 10 بطاقات
+const COLUMNS = 2;
+const ROWS = 5;
+const CARDS_PER_SHEET = COLUMNS * ROWS;
+
+// الهوامش والفراغات
+// عرضياً: 93 + 11 + 93 = 197 ملم، ويبقى 1.5 ملم لكل جانب
+// طولياً: 60 × 5 = 300 ملم، لذلك بدون هامش أو فراغ بين الصفوف
+const MARGIN_X_MM = 1.5;
+const MARGIN_Y_MM = 0;
+const GAP_X_MM = 11;
+const GAP_Y_MM = 0;
+
+// موضع وحجم QR داخل البطاقة
+const QR_SIZE_MM = 22.6;
+const QR_OFFSET_X_MM = 35.5;
+const QR_OFFSET_Y_MM = 8.2;
+
+// علامات القص
+const CROP_MARK_LENGTH_MM = 2.5;
+const CROP_MARK_GAP_MM = 0.8;
+const CROP_MARK_THICKNESS = 0.35;
+
+// نخليها false بالتجربة الأولى: ظهر بنفس ترتيب الوجه بدون عكس
+const MIRROR_BACK = false;
+
+const MM_TO_POINTS = 72 / 25.4;
+
+function mm(value: number) {
+  return value * MM_TO_POINTS;
+}
+
 function dataUrlToBytes(dataUrl: string) {
   const base64 = dataUrl.split(",")[1];
 
@@ -36,8 +82,123 @@ function dataUrlToBytes(dataUrl: string) {
     throw new Error("Invalid QR image");
   }
 
-  return Uint8Array.from(
-    Buffer.from(base64, "base64")
+  return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+async function loadImage(fileName: string) {
+  const imagePath = path.join(
+    process.cwd(),
+    "public",
+    "print",
+    fileName
+  );
+
+  return fs.readFile(imagePath);
+}
+
+function getCardPosition(position: number) {
+  const column = position % COLUMNS;
+  const row = Math.floor(position / COLUMNS);
+
+  const cardWidth = mm(CARD_WIDTH_MM);
+  const cardHeight = mm(CARD_HEIGHT_MM);
+  const pageHeight = mm(SHEET_HEIGHT_MM);
+
+  const x =
+    mm(MARGIN_X_MM) +
+    column * (cardWidth + mm(GAP_X_MM));
+
+  const y =
+    pageHeight -
+    mm(MARGIN_Y_MM) -
+    cardHeight -
+    row * (cardHeight + mm(GAP_Y_MM));
+
+  return { x, y };
+}
+
+function getBackPosition(position: number) {
+  if (!MIRROR_BACK) {
+    return getCardPosition(position);
+  }
+
+  const row = Math.floor(position / COLUMNS);
+  const column = position % COLUMNS;
+  const mirroredColumn = COLUMNS - 1 - column;
+  const mirroredPosition = row * COLUMNS + mirroredColumn;
+
+  return getCardPosition(mirroredPosition);
+}
+
+function drawCropMarks(
+  page: PDFPage,
+  x: number,
+  y: number,
+  cardWidth: number,
+  cardHeight: number
+) {
+  const length = mm(CROP_MARK_LENGTH_MM);
+  const gap = mm(CROP_MARK_GAP_MM);
+  const color = rgb(0.55, 0.55, 0.55);
+
+  const line = (
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number
+  ) => {
+    page.drawLine({
+      start: { x: startX, y: startY },
+      end: { x: endX, y: endY },
+      thickness: CROP_MARK_THICKNESS,
+      color,
+    });
+  };
+
+  // الزاوية السفلية اليسرى
+  line(x - gap - length, y, x - gap, y);
+  line(x, y - gap - length, x, y - gap);
+
+  // الزاوية السفلية اليمنى
+  line(
+    x + cardWidth + gap,
+    y,
+    x + cardWidth + gap + length,
+    y
+  );
+  line(
+    x + cardWidth,
+    y - gap - length,
+    x + cardWidth,
+    y - gap
+  );
+
+  // الزاوية العلوية اليسرى
+  line(
+    x - gap - length,
+    y + cardHeight,
+    x - gap,
+    y + cardHeight
+  );
+  line(
+    x,
+    y + cardHeight + gap,
+    x,
+    y + cardHeight + gap + length
+  );
+
+  // الزاوية العلوية اليمنى
+  line(
+    x + cardWidth + gap,
+    y + cardHeight,
+    x + cardWidth + gap + length,
+    y + cardHeight
+  );
+  line(
+    x + cardWidth,
+    y + cardHeight + gap,
+    x + cardWidth,
+    y + cardHeight + gap + length
   );
 }
 
@@ -46,18 +207,12 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { id: batchId } =
-      await context.params;
+    const { id: batchId } = await context.params;
 
     if (!batchId) {
       return NextResponse.json(
-        {
-          error:
-            "معرّف الدفعة غير موجود",
-        },
-        {
-          status: 400,
-        }
+        { error: "معرّف الدفعة غير موجود" },
+        { status: 400 }
       );
     }
 
@@ -73,9 +228,7 @@ export async function GET(
           error:
             "إعدادات Supabase الخاصة بالسيرفر غير مكتملة",
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
@@ -90,10 +243,7 @@ export async function GET(
       }
     );
 
-    const [
-      batchResult,
-      cardsResult,
-    ] = await Promise.all([
+    const [batchResult, cardsResult] = await Promise.all([
       adminSupabase
         .from("card_batches")
         .select(
@@ -104,13 +254,9 @@ export async function GET(
 
       adminSupabase
         .from("cards")
-        .select(
-          "id, card_code, status, batch_id"
-        )
+        .select("id, card_code, status, batch_id")
         .eq("batch_id", batchId)
-        .order("card_code", {
-          ascending: true,
-        }),
+        .order("card_code", { ascending: true }),
     ]);
 
     if (batchResult.error) {
@@ -123,336 +269,160 @@ export async function GET(
 
     if (!batchResult.data) {
       return NextResponse.json(
-        {
-          error:
-            "لم يتم العثور على الدفعة",
-        },
-        {
-          status: 404,
-        }
+        { error: "لم يتم العثور على الدفعة" },
+        { status: 404 }
       );
     }
 
-    const batch =
-      batchResult.data as BatchRecord;
-
-    const cards =
-      (cardsResult.data ||
-        []) as CardRecord[];
+    const batch = batchResult.data as BatchRecord;
+    const cards = (cardsResult.data || []) as CardRecord[];
 
     if (cards.length === 0) {
       return NextResponse.json(
-        {
-          error:
-            "لا توجد بطاقات داخل الدفعة",
-        },
-        {
-          status: 400,
-        }
+        { error: "لا توجد بطاقات داخل الدفعة" },
+        { status: 400 }
       );
     }
 
-    const pdfDocument =
-      await PDFDocument.create();
+    const pdfDocument = await PDFDocument.create();
 
-    const boldFont =
-      await pdfDocument.embedFont(
-        StandardFonts.HelveticaBold
-      );
+    const [frontImageBytes, backImageBytes] =
+      await Promise.all([
+        loadImage("card-front.png"),
+        loadImage("card-back.png"),
+      ]);
 
-    const regularFont =
-      await pdfDocument.embedFont(
-        StandardFonts.Helvetica
-      );
+    const frontImage = await pdfDocument.embedPng(
+      frontImageBytes
+    );
 
-    // A4 in PDF points.
-    const pageWidth = 595.28;
-    const pageHeight = 841.89;
+    const backImage = await pdfDocument.embedPng(
+      backImageBytes
+    );
 
-    // Standard card: 85.6 × 54 mm.
-    const cardWidth = 242.65;
-    const cardHeight = 153.07;
-
-    const marginX = 20;
-    const gapX =
-      pageWidth -
-      marginX * 2 -
-      cardWidth * 2;
-
-    const marginY = 15;
-    const gapY =
-      (pageHeight -
-        marginY * 2 -
-        cardHeight * 5) /
-      4;
+    const pageWidth = mm(SHEET_WIDTH_MM);
+    const pageHeight = mm(SHEET_HEIGHT_MM);
+    const cardWidth = mm(CARD_WIDTH_MM);
+    const cardHeight = mm(CARD_HEIGHT_MM);
+    const qrSize = mm(QR_SIZE_MM);
 
     for (
-      let cardIndex = 0;
-      cardIndex < cards.length;
-      cardIndex += 1
+      let sheetStart = 0;
+      sheetStart < cards.length;
+      sheetStart += CARDS_PER_SHEET
     ) {
-      if (cardIndex % 10 === 0) {
-        pdfDocument.addPage([
-          pageWidth,
-          pageHeight,
-        ]);
-      }
+      const sheetCards = cards.slice(
+        sheetStart,
+        sheetStart + CARDS_PER_SHEET
+      );
 
-      const page =
-        pdfDocument.getPages()[
-          pdfDocument.getPageCount() - 1
-        ];
+      // الصفحة الأمامية
+      const frontPage = pdfDocument.addPage([
+        pageWidth,
+        pageHeight,
+      ]);
 
-      const position =
-        cardIndex % 10;
+      for (
+        let position = 0;
+        position < sheetCards.length;
+        position += 1
+      ) {
+        const card = sheetCards[position];
+        const { x, y } = getCardPosition(position);
 
-      const column =
-        position % 2;
+        frontPage.drawImage(frontImage, {
+          x,
+          y,
+          width: cardWidth,
+          height: cardHeight,
+        });
 
-      const row =
-        Math.floor(position / 2);
+        const cardUrl =
+          `${SITE_ORIGIN}/card/` +
+          encodeURIComponent(card.card_code);
 
-      const x =
-        marginX +
-        column *
-          (cardWidth + gapX);
+        const qrDataUrl = await QRCode.toDataURL(cardUrl, {
+          errorCorrectionLevel: "H",
+          margin: 1,
+          width: 700,
+          color: {
+            dark: "#111111",
+            light: "#FFFFFF",
+          },
+        });
 
-      const y =
-        pageHeight -
-        marginY -
-        cardHeight -
-        row *
-          (cardHeight + gapY);
-
-      const card = cards[cardIndex];
-
-      const cardUrl =
-        `${SITE_ORIGIN}/card/` +
-        encodeURIComponent(
-          card.card_code
-        );
-
-      const qrDataUrl =
-        await QRCode.toDataURL(
-          cardUrl,
-          {
-            errorCorrectionLevel: "H",
-            margin: 1,
-            width: 700,
-            color: {
-              dark: "#111111",
-              light: "#FFFFFF",
-            },
-          }
-        );
-
-      const qrImage =
-        await pdfDocument.embedPng(
+        const qrImage = await pdfDocument.embedPng(
           dataUrlToBytes(qrDataUrl)
         );
 
-      // White, printer-friendly card.
-      page.drawRectangle({
-        x,
-        y,
-        width: cardWidth,
-        height: cardHeight,
-        color: rgb(1, 1, 1),
-        borderColor: rgb(
-          1,
-          0.42,
-          0
-        ),
-        borderWidth: 2,
-      });
+        frontPage.drawImage(qrImage, {
+          x: x + mm(QR_OFFSET_X_MM),
+          y: y + mm(QR_OFFSET_Y_MM),
+          width: qrSize,
+          height: qrSize,
+        });
 
-      // Orange top strip.
-      page.drawRectangle({
-        x,
-        y:
-          y +
-          cardHeight -
-          23,
-        width: cardWidth,
-        height: 23,
-        color: rgb(
-          1,
-          0.42,
-          0
-        ),
-      });
-
-      page.drawText("NEXO", {
-        x: x + 12,
-        y:
-          y +
-          cardHeight -
-          17,
-        size: 14,
-        font: boldFont,
-        color: rgb(1, 1, 1),
-      });
-
-      page.drawText(
-        "DIGITAL PASS",
-        {
-          x:
-            x +
-            cardWidth -
-            83,
-          y:
-            y +
-            cardHeight -
-            15,
-          size: 7,
-          font: boldFont,
-          color: rgb(1, 1, 1),
-        }
-      );
-
-      const qrSize = 104;
-
-      page.drawImage(qrImage, {
-        x: x + 12,
-        y: y + 15,
-        width: qrSize,
-        height: qrSize,
-      });
-
-      page.drawText(
-        card.card_code,
-        {
-          x: x + 129,
-          y: y + 79,
-          size: 15,
-          font: boldFont,
-          color: rgb(
-            0.08,
-            0.08,
-            0.08
-          ),
-        }
-      );
-
-      page.drawText(
-        "Scan to open your secure card",
-        {
-          x: x + 129,
-          y: y + 59,
-          size: 7.2,
-          font: regularFont,
-          color: rgb(
-            0.35,
-            0.35,
-            0.35
-          ),
-        }
-      );
-
-      page.drawText(
-        "Secure  |  Private  |  Yours",
-        {
-          x: x + 129,
-          y: y + 39,
-          size: 7.5,
-          font: boldFont,
-          color: rgb(
-            1,
-            0.42,
-            0
-          ),
-        }
-      );
-
-      page.drawText(
-        batch.batch_code,
-        {
-          x: x + 129,
-          y: y + 20,
-          size: 6.5,
-          font: regularFont,
-          color: rgb(
-            0.45,
-            0.45,
-            0.45
-          ),
-        }
-      );
-
-      // Light crop marks.
-      const markLength = 5;
-      const markColor = rgb(
-        0.72,
-        0.72,
-        0.72
-      );
-
-      page.drawLine({
-        start: {
-          x: x - markLength,
+        drawCropMarks(
+          frontPage,
+          x,
           y,
-        },
-        end: { x, y },
-        thickness: 0.5,
-        color: markColor,
-      });
+          cardWidth,
+          cardHeight
+        );
+      }
 
-      page.drawLine({
-        start: {
-          x: x + cardWidth,
+      // الصفحة الخلفية — نفس المواقع بدون عكس بالتجربة الأولى
+      const backPage = pdfDocument.addPage([
+        pageWidth,
+        pageHeight,
+      ]);
+
+      for (
+        let position = 0;
+        position < sheetCards.length;
+        position += 1
+      ) {
+        const { x, y } = getBackPosition(position);
+
+        backPage.drawImage(backImage, {
+          x,
           y,
-        },
-        end: {
-          x:
-            x +
-            cardWidth +
-            markLength,
+          width: cardWidth,
+          height: cardHeight,
+        });
+
+        drawCropMarks(
+          backPage,
+          x,
           y,
-        },
-        thickness: 0.5,
-        color: markColor,
-      });
+          cardWidth,
+          cardHeight
+        );
+      }
     }
 
-    pdfDocument.setTitle(
-      `NEXO ${batch.batch_code}`
-    );
+    pdfDocument.setTitle(`NEXO ${batch.batch_code}`);
+    pdfDocument.setSubject(`${cards.length} NEXO cards`);
+    pdfDocument.setCreator("NEXO Digital Pass");
+    pdfDocument.setProducer("NEXO Digital Pass");
 
-    pdfDocument.setSubject(
-      `${cards.length} NEXO cards`
-    );
+    const pdfBytes = await pdfDocument.save();
 
-    const pdfBytes =
-      await pdfDocument.save();
-
-    return new NextResponse(
-      Buffer.from(pdfBytes),
-      {
-        status: 200,
-        headers: {
-          "Content-Type":
-            "application/pdf",
-          "Content-Disposition":
-            `attachment; filename="${batch.batch_code}-NEXO-Cards.pdf"`,
-          "Cache-Control":
-            "no-store",
-        },
-      }
-    );
+    return new NextResponse(Buffer.from(pdfBytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition":
+          `attachment; filename="${batch.batch_code}-NEXO-Cards.pdf"`,
+        "Cache-Control": "no-store",
+      },
+    });
   } catch (error) {
-    console.error(
-      "Generate batch PDF error:",
-      error
-    );
+    console.error("Generate batch PDF error:", error);
 
     return NextResponse.json(
-      {
-        error:
-          "تعذر إنشاء ملف الطباعة",
-      },
-      {
-        status: 500,
-      }
+      { error: "تعذر إنشاء ملف الطباعة" },
+      { status: 500 }
     );
   }
 }
