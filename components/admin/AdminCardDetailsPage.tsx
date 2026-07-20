@@ -231,6 +231,15 @@ export default function AdminCardDetailsPage({ card }: Props) {
   return (
     <main dir="rtl" className="min-h-screen bg-[#050505] text-white">
       <div className="mx-auto w-full max-w-[600px] px-5 py-6">
+        <button
+          type="button"
+          onClick={() => router.push("/admin/cards")}
+          className="mb-5 flex items-center gap-2 rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-sm font-bold text-orange-300 transition hover:bg-orange-500/20 active:scale-95"
+        >
+          <span aria-hidden="true">←</span>
+          <span>رجوع إلى البطاقات</span>
+        </button>
+
         <p className="text-xs font-bold tracking-[0.2em] text-orange-400">
           NEXO CONTROL PANEL
         </p>
