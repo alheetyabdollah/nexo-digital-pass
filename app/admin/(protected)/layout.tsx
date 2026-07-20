@@ -21,6 +21,8 @@ export default async function ProtectedAdminLayout({
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
+    console.log("Admin user session error:", userError);
+
     redirect("/admin/login");
   }
 
@@ -32,6 +34,12 @@ export default async function ProtectedAdminLayout({
     .select("role")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  console.log("Admin authorization check:", {
+    userId: user.id,
+    adminUser,
+    adminError,
+  });
 
   if (
     adminError ||
