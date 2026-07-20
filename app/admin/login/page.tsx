@@ -1,85 +1,171 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-const supabase = createClient();
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [status, setStatus] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [password, setPassword] =
+    useState("");
 
- useEffect(() => {
-  setIsCheckingSession(false);
-}, []);
+  const [status, setStatus] =
+    useState("");
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  const [isLoading, setIsLoading] =
+    useState(false);
+
+  const [
+    isCheckingSession,
+    setIsCheckingSession,
+  ] = useState(true);
+
+  useEffect(() => {
+    async function checkExistingSession() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          setIsCheckingSession(false);
+          return;
+        }
+
+        const {
+          data: aalData,
+          error: aalError,
+        } =
+          await supabase.auth.mfa
+            .getAuthenticatorAssuranceLevel();
+
+        if (aalError) {
+          setIsCheckingSession(false);
+          return;
+        }
+
+        if (
+          aalData.currentLevel === "aal2"
+        ) {
+          window.location.replace(
+            "/admin/cards"
+          );
+
+          return;
+        }
+
+        window.location.replace(
+          "/admin/2fa"
+        );
+      } catch (error) {
+        console.error(
+          "Admin session check error:",
+          error
+        );
+
+        setIsCheckingSession(false);
+      }
+    }
+
+    void checkExistingSession();
+  }, [supabase]);
+
+  const handleLogin = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail =
+      email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
-      setStatus("يرجى إدخال الإيميل وكلمة المرور");
+      setStatus(
+        "يرجى إدخال الإيميل وكلمة المرور"
+      );
+
       return;
     }
 
     setIsLoading(true);
-    setStatus("جاري التحقق من بيانات الدخول...");
+
+    setStatus(
+      "جاري التحقق من بيانات الدخول..."
+    );
 
     try {
-      const { data, error } =
-        await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
+      const {
+        data,
+        error,
+      } =
+        await supabase.auth
+          .signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
 
-      if (error || !data.user) {
-        setStatus("الإيميل أو كلمة المرور غير صحيحة");
-        return;
-      }
-
-      const { data: adminUser, error: adminError } =
-        await supabase
-          .from("admin_users")
-          .select("user_id")
-          .eq("user_id", data.user.id)
-          .maybeSingle();
-
-      if (adminError || !adminUser) {
-        await supabase.auth.signOut();
-
+      if (
+        error ||
+        !data.user ||
+        !data.session
+      ) {
         setPassword("");
-        setStatus("هذا الحساب غير مخوّل للدخول إلى لوحة الإدارة");
+
+        setStatus(
+          "الإيميل أو كلمة المرور غير صحيحة"
+        );
+
         return;
       }
 
-      setStatus("تم تسجيل الدخول بنجاح");
+      setStatus(
+        "تم تسجيل الدخول بنجاح"
+      );
 
-      const { data: aalData, error: aalError } =
-  await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const {
+        data: aalData,
+        error: aalError,
+      } =
+        await supabase.auth.mfa
+          .getAuthenticatorAssuranceLevel();
 
-if (aalError) {
-  setStatus("تعذر التحقق من المصادقة الثنائية");
-  return;
-}
+      if (aalError) {
+        setStatus(
+          "تعذر التحقق من المصادقة الثنائية"
+        );
 
-if (
-  aalData.currentLevel === "aal2"
-) {
-  router.replace("/admin/cards");
-  router.refresh();
-  return;
-}
+        return;
+      }
 
-router.replace("/admin/2fa");
-router.refresh();
+      if (
+        aalData.currentLevel === "aal2"
+      ) {
+        window.location.replace(
+          "/admin/cards"
+        );
+
+        return;
+      }
+
+      window.location.replace(
+        "/admin/2fa"
+      );
     } catch (error) {
-      console.error("Admin login error:", error);
-      setStatus("حدث خطأ غير متوقع، حاول مرة أخرى");
+      console.error(
+        "Admin login error:",
+        error
+      );
+
+      setStatus(
+        "حدث خطأ غير متوقع، حاول مرة أخرى"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +206,8 @@ router.refresh();
           </h1>
 
           <p className="mt-3 text-sm leading-7 text-white/50">
-            هذه الصفحة مخصصة لمالك نظام NEXO فقط
+            هذه الصفحة مخصصة لمالك نظام
+            NEXO فقط
           </p>
         </header>
 
@@ -143,7 +230,9 @@ router.refresh();
               autoComplete="email"
               value={email}
               onChange={(event) =>
-                setEmail(event.target.value)
+                setEmail(
+                  event.target.value
+                )
               }
               placeholder="admin@example.com"
               disabled={isLoading}
@@ -166,7 +255,9 @@ router.refresh();
               autoComplete="current-password"
               value={password}
               onChange={(event) =>
-                setPassword(event.target.value)
+                setPassword(
+                  event.target.value
+                )
               }
               placeholder="••••••••••••"
               disabled={isLoading}
@@ -179,7 +270,9 @@ router.refresh();
               className={`rounded-2xl border px-4 py-3 text-center text-sm leading-6 ${
                 status.includes("بنجاح")
                   ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-                  : status.includes("جاري")
+                  : status.includes(
+                        "جاري"
+                      )
                     ? "border-orange-500/20 bg-orange-500/10 text-orange-300"
                     : "border-red-500/20 bg-red-500/10 text-red-300"
               }`}
