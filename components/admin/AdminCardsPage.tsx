@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,7 @@ import {
   HiOutlineUserGroup,
 } from "react-icons/hi2";
 
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 
 type CardRecord = {
   id: string;
@@ -96,6 +97,9 @@ function getStatusClasses(
 
 export default function AdminCardsPage() {
   const router = useRouter();
+
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
   
   const [cards, setCards] =
     useState<CardRecord[]>([]);

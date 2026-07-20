@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import { createClient } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type ProtectedAdminLayoutProps = {
   children: ReactNode;
@@ -12,6 +13,7 @@ export default async function ProtectedAdminLayout({
   children,
 }: ProtectedAdminLayoutProps) {
   const supabase = await createClient();
+  const supabaseAdmin = createAdminClient();
 
   const {
     data: { user },
@@ -22,25 +24,29 @@ export default async function ProtectedAdminLayout({
     redirect("/admin/login");
   }
 
-  const { data: adminUser, error: adminError } =
-    await supabaseAdmin
-      .from("admin_users")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
+  const {
+    data: adminUser,
+    error: adminError,
+  } = await supabaseAdmin
+    .from("admin_users")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   if (
     adminError ||
     !adminUser ||
     adminUser.role !== "owner"
   ) {
-    redirect("/admin/login?error=unauthorized");
+    redirect(
+      "/admin/login?error=unauthorized"
+    );
   }
 
   return (
-  <>
-    <AdminLogoutButton />
-    {children}
-  </>
-);
+    <>
+      <AdminLogoutButton />
+      {children}
+    </>
+  );
 }
