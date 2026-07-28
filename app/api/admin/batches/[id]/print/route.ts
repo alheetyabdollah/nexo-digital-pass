@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createClient } from "@supabase/supabase-js";
-import { PDFDocument, PDFPage, rgb } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFPage,
+  rgb,
+  pushGraphicsState,
+  popGraphicsState,
+  concatTransformationMatrix,
+} from "pdf-lib";
 import QRCode from "qrcode";
 import fs from "fs/promises";
 import path from "path";
@@ -66,9 +73,6 @@ const CROP_MARK_LENGTH_MM = 2.5;
 const CROP_MARK_GAP_MM = 0.8;
 const CROP_MARK_THICKNESS = 0.35;
 
-// نخليها false بالتجربة الأولى: ظهر بنفس ترتيب الوجه بدون عكس
-const MIRROR_BACK = false;
-
 const MM_TO_POINTS = 72 / 25.4;
 
 function mm(value: number) {
@@ -115,19 +119,6 @@ function getCardPosition(position: number) {
     row * (cardHeight + mm(GAP_Y_MM));
 
   return { x, y };
-}
-
-function getBackPosition(position: number) {
-  if (!MIRROR_BACK) {
-    return getCardPosition(position);
-  }
-
-  const row = Math.floor(position / COLUMNS);
-  const column = position % COLUMNS;
-  const mirroredColumn = COLUMNS - 1 - column;
-  const mirroredPosition = row * COLUMNS + mirroredColumn;
-
-  return getCardPosition(mirroredPosition);
 }
 
 function drawCropMarks(
@@ -316,7 +307,10 @@ export async function GET(
         sheetStart + CARDS_PER_SHEET
       );
 
-      // الصفحة الأمامية
+      // =================================================
+      // الصفحة الأمامية — تبقى طبيعية بدون انعكاس
+      // =================================================
+
       const frontPage = pdfDocument.addPage([
         pageWidth,
         pageHeight,
@@ -371,18 +365,36 @@ export async function GET(
         );
       }
 
-      // الصفحة الخلفية — نفس المواقع بدون عكس بالتجربة الأولى
+      // =================================================
+      // الصفحة الخلفية — انعكاس أفقي كامل مثل المرآة
+      // =================================================
+
       const backPage = pdfDocument.addPage([
         pageWidth,
         pageHeight,
       ]);
+
+      // حفظ حالة الرسم قبل الانعكاس
+      backPage.pushOperators(pushGraphicsState());
+
+      // انعكاس الصفحة الخلفية كاملة من اليمين إلى اليسار
+      backPage.pushOperators(
+        concatTransformationMatrix(
+          -1,
+          0,
+          0,
+          1,
+          pageWidth,
+          0
+        )
+      );
 
       for (
         let position = 0;
         position < sheetCards.length;
         position += 1
       ) {
-        const { x, y } = getBackPosition(position);
+        const { x, y } = getCardPosition(position);
 
         backPage.drawImage(backImage, {
           x,
@@ -399,6 +411,9 @@ export async function GET(
           cardHeight
         );
       }
+
+      // إرجاع حالة الرسم إلى وضعها الطبيعي
+      backPage.pushOperators(popGraphicsState());
     }
 
     pdfDocument.setTitle(`NEXO ${batch.batch_code}`);
