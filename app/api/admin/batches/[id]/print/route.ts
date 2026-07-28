@@ -307,113 +307,81 @@ export async function GET(
         sheetStart + CARDS_PER_SHEET
       );
 
-      // =================================================
-      // الصفحة الأمامية — تبقى طبيعية بدون انعكاس
-      // =================================================
+// =================================================
+// الصفحة الأمامية — انعكاس أفقي كامل مثل المرآة
+// =================================================
 
-      const frontPage = pdfDocument.addPage([
-        pageWidth,
-        pageHeight,
-      ]);
+const frontPage = pdfDocument.addPage([
+  pageWidth,
+  pageHeight,
+]);
 
-      for (
-        let position = 0;
-        position < sheetCards.length;
-        position += 1
-      ) {
-        const card = sheetCards[position];
-        const { x, y } = getCardPosition(position);
+// حفظ حالة الرسم قبل الانعكاس
+frontPage.pushOperators(pushGraphicsState());
 
-        frontPage.drawImage(frontImage, {
-          x,
-          y,
-          width: cardWidth,
-          height: cardHeight,
-        });
+// انعكاس الصفحة الأمامية كاملة من اليمين إلى اليسار
+frontPage.pushOperators(
+  concatTransformationMatrix(
+    -1,
+    0,
+    0,
+    1,
+    pageWidth,
+    0
+  )
+);
 
-        const cardUrl =
-          `${SITE_ORIGIN}/card/` +
-          encodeURIComponent(card.card_code);
+for (
+  let position = 0;
+  position < sheetCards.length;
+  position += 1
+) {
+  const card = sheetCards[position];
+  const { x, y } = getCardPosition(position);
 
-        const qrDataUrl = await QRCode.toDataURL(cardUrl, {
-          errorCorrectionLevel: "H",
-          margin: 1,
-          width: 700,
-          color: {
-            dark: "#111111",
-            light: "#FFFFFF",
-          },
-        });
+  frontPage.drawImage(frontImage, {
+    x,
+    y,
+    width: cardWidth,
+    height: cardHeight,
+  });
 
-        const qrImage = await pdfDocument.embedPng(
-          dataUrlToBytes(qrDataUrl)
-        );
+  const cardUrl =
+    `${SITE_ORIGIN}/card/` +
+    encodeURIComponent(card.card_code);
 
-        frontPage.drawImage(qrImage, {
-          x: x + mm(QR_OFFSET_X_MM),
-          y: y + mm(QR_OFFSET_Y_MM),
-          width: qrSize,
-          height: qrSize,
-        });
+  const qrDataUrl = await QRCode.toDataURL(cardUrl, {
+    errorCorrectionLevel: "H",
+    margin: 1,
+    width: 700,
+    color: {
+      dark: "#111111",
+      light: "#FFFFFF",
+    },
+  });
 
-        drawCropMarks(
-          frontPage,
-          x,
-          y,
-          cardWidth,
-          cardHeight
-        );
-      }
+  const qrImage = await pdfDocument.embedPng(
+    dataUrlToBytes(qrDataUrl)
+  );
 
-      // =================================================
-      // الصفحة الخلفية — انعكاس أفقي كامل مثل المرآة
-      // =================================================
+  frontPage.drawImage(qrImage, {
+    x: x + mm(QR_OFFSET_X_MM),
+    y: y + mm(QR_OFFSET_Y_MM),
+    width: qrSize,
+    height: qrSize,
+  });
 
-      const backPage = pdfDocument.addPage([
-        pageWidth,
-        pageHeight,
-      ]);
+  drawCropMarks(
+    frontPage,
+    x,
+    y,
+    cardWidth,
+    cardHeight
+  );
+}
 
-      // حفظ حالة الرسم قبل الانعكاس
-      backPage.pushOperators(pushGraphicsState());
-
-      // انعكاس الصفحة الخلفية كاملة من اليمين إلى اليسار
-      backPage.pushOperators(
-        concatTransformationMatrix(
-          -1,
-          0,
-          0,
-          1,
-          pageWidth,
-          0
-        )
-      );
-
-      for (
-        let position = 0;
-        position < sheetCards.length;
-        position += 1
-      ) {
-        const { x, y } = getCardPosition(position);
-
-        backPage.drawImage(backImage, {
-          x,
-          y,
-          width: cardWidth,
-          height: cardHeight,
-        });
-
-        drawCropMarks(
-          backPage,
-          x,
-          y,
-          cardWidth,
-          cardHeight
-        );
-      }
-
-      // إرجاع حالة الرسم إلى وضعها الطبيعي
-      backPage.pushOperators(popGraphicsState());
+// إرجاع حالة الرسم إلى وضعها الطبيعي
+frontPage.pushOperators(popGraphicsState());
     }
 
     pdfDocument.setTitle(`NEXO ${batch.batch_code}`);
