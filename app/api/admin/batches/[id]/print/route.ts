@@ -42,33 +42,25 @@ const SITE_ORIGIN =
 // NEXO PRINT SETTINGS — جميع القياسات بالمليمتر
 // =====================================================
 
-// ورقة الطباعة: عرض 200 × ارتفاع 300 ملم
 const SHEET_WIDTH_MM = 200;
 const SHEET_HEIGHT_MM = 300;
 
-// تصميم البطاقة بعد زيادة مساحة النزف: 93 × 60 ملم
 const CARD_WIDTH_MM = 93;
 const CARD_HEIGHT_MM = 60;
 
-// الترتيب: عمودان × خمسة صفوف = 10 بطاقات
 const COLUMNS = 2;
 const ROWS = 5;
 const CARDS_PER_SHEET = COLUMNS * ROWS;
 
-// الهوامش والفراغات
-// عرضياً: 93 + 11 + 93 = 197 ملم، ويبقى 1.5 ملم لكل جانب
-// طولياً: 60 × 5 = 300 ملم، لذلك بدون هامش أو فراغ بين الصفوف
 const MARGIN_X_MM = 1.5;
 const MARGIN_Y_MM = 0;
 const GAP_X_MM = 11;
 const GAP_Y_MM = 0;
 
-// موضع وحجم QR داخل البطاقة
 const QR_SIZE_MM = 22.6;
 const QR_OFFSET_X_MM = 35.5;
 const QR_OFFSET_Y_MM = 8.2;
 
-// علامات القص
 const CROP_MARK_LENGTH_MM = 2.5;
 const CROP_MARK_GAP_MM = 0.8;
 const CROP_MARK_THICKNESS = 0.35;
@@ -307,81 +299,125 @@ export async function GET(
         sheetStart + CARDS_PER_SHEET
       );
 
-// =================================================
-// الصفحة الأمامية — انعكاس أفقي كامل مثل المرآة
-// =================================================
+      // =================================================
+      // الصفحة الأمامية — انعكاس أفقي كامل مثل المرآة
+      // =================================================
 
-const frontPage = pdfDocument.addPage([
-  pageWidth,
-  pageHeight,
-]);
+      const frontPage = pdfDocument.addPage([
+        pageWidth,
+        pageHeight,
+      ]);
 
-// حفظ حالة الرسم قبل الانعكاس
-frontPage.pushOperators(pushGraphicsState());
+      frontPage.pushOperators(pushGraphicsState());
 
-// انعكاس الصفحة الأمامية كاملة من اليمين إلى اليسار
-frontPage.pushOperators(
-  concatTransformationMatrix(
-    -1,
-    0,
-    0,
-    1,
-    pageWidth,
-    0
-  )
-);
+      frontPage.pushOperators(
+        concatTransformationMatrix(
+          -1,
+          0,
+          0,
+          1,
+          pageWidth,
+          0
+        )
+      );
 
-for (
-  let position = 0;
-  position < sheetCards.length;
-  position += 1
-) {
-  const card = sheetCards[position];
-  const { x, y } = getCardPosition(position);
+      for (
+        let position = 0;
+        position < sheetCards.length;
+        position += 1
+      ) {
+        const card = sheetCards[position];
+        const { x, y } = getCardPosition(position);
 
-  frontPage.drawImage(frontImage, {
-    x,
-    y,
-    width: cardWidth,
-    height: cardHeight,
-  });
+        frontPage.drawImage(frontImage, {
+          x,
+          y,
+          width: cardWidth,
+          height: cardHeight,
+        });
 
-  const cardUrl =
-    `${SITE_ORIGIN}/card/` +
-    encodeURIComponent(card.card_code);
+        const cardUrl =
+          `${SITE_ORIGIN}/card/` +
+          encodeURIComponent(card.card_code);
 
-  const qrDataUrl = await QRCode.toDataURL(cardUrl, {
-    errorCorrectionLevel: "H",
-    margin: 1,
-    width: 700,
-    color: {
-      dark: "#111111",
-      light: "#FFFFFF",
-    },
-  });
+        const qrDataUrl = await QRCode.toDataURL(cardUrl, {
+          errorCorrectionLevel: "H",
+          margin: 1,
+          width: 700,
+          color: {
+            dark: "#111111",
+            light: "#FFFFFF",
+          },
+        });
 
-  const qrImage = await pdfDocument.embedPng(
-    dataUrlToBytes(qrDataUrl)
-  );
+        const qrImage = await pdfDocument.embedPng(
+          dataUrlToBytes(qrDataUrl)
+        );
 
-  frontPage.drawImage(qrImage, {
-    x: x + mm(QR_OFFSET_X_MM),
-    y: y + mm(QR_OFFSET_Y_MM),
-    width: qrSize,
-    height: qrSize,
-  });
+        frontPage.drawImage(qrImage, {
+          x: x + mm(QR_OFFSET_X_MM),
+          y: y + mm(QR_OFFSET_Y_MM),
+          width: qrSize,
+          height: qrSize,
+        });
 
-  drawCropMarks(
-    frontPage,
-    x,
-    y,
-    cardWidth,
-    cardHeight
-  );
-}
+        drawCropMarks(
+          frontPage,
+          x,
+          y,
+          cardWidth,
+          cardHeight
+        );
+      }
 
-// إرجاع حالة الرسم إلى وضعها الطبيعي
-frontPage.pushOperators(popGraphicsState());
+      frontPage.pushOperators(popGraphicsState());
+
+      // =================================================
+      // الصفحة الخلفية — انعكاس أفقي كامل مثل المرآة
+      // =================================================
+
+      const backPage = pdfDocument.addPage([
+        pageWidth,
+        pageHeight,
+      ]);
+
+      backPage.pushOperators(pushGraphicsState());
+
+      backPage.pushOperators(
+        concatTransformationMatrix(
+          -1,
+          0,
+          0,
+          1,
+          pageWidth,
+          0
+        )
+      );
+
+      for (
+        let position = 0;
+        position < sheetCards.length;
+        position += 1
+      ) {
+        const { x, y } = getCardPosition(position);
+
+        backPage.drawImage(backImage, {
+          x,
+          y,
+          width: cardWidth,
+          height: cardHeight,
+        });
+
+        drawCropMarks(
+          backPage,
+          x,
+          y,
+          cardWidth,
+          cardHeight
+        );
+      }
+
+      backPage.pushOperators(popGraphicsState());
     }
 
     pdfDocument.setTitle(`NEXO ${batch.batch_code}`);
