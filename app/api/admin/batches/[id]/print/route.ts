@@ -4,7 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import {
   PDFDocument,
   PDFPage,
+  PDFFont,
   StandardFonts,
+  degrees,
   rgb,
   pushGraphicsState,
   popGraphicsState,
@@ -60,19 +62,27 @@ const MARGIN_Y_MM = 0;
 const GAP_X_MM = 11;
 const GAP_Y_MM = 0;
 
-// تمديد خلفية البطاقة باتجاه المنتصف
-// البطاقة اليسرى تتمدد لليمين 1.5 ملم
-// البطاقة اليمنى تتمدد لليسار 1.5 ملم
-// بذلك تنخفض المسافة المطبوعة بالوسط بمجموع 3 ملم
+// تمديد خلفية التصميم باتجاه المنتصف
 const INNER_BLEED_MM = 1.5;
 
+// إعدادات QR
 const QR_SIZE_MM = 22.6;
 const QR_OFFSET_X_MM = 35.5;
 const QR_OFFSET_Y_MM = 8.2;
 
-// إعدادات رقم البطاقة
-const CARD_ID_FONT_SIZE_PT = 5.8;
-const CARD_ID_OFFSET_Y_MM = 3.2;
+// سحب QR الظاهر في الجهة اليمنى نحو اليسار
+// لأن الصفحة معكوسة أفقيًا، نزيد X قبل الانعكاس
+const RIGHT_VISIBLE_QR_SHIFT_MM = 1;
+
+// إعدادات CARD ID في ظهر البطاقة
+const CARD_ID_FONT_SIZE_PT = 9.5;
+
+// موقع الرقم من أسفل البطاقة
+// موضوع بالمنتصف وفوق معلومات التواصل
+const CARD_ID_BOTTOM_MM = 11.5;
+
+// إعداد رقم الورقة في المساحة الوسطية
+const SHEET_LABEL_FONT_SIZE_PT = 10;
 
 const CROP_MARK_LENGTH_MM = 2.5;
 const CROP_MARK_GAP_MM = 0.8;
@@ -91,7 +101,9 @@ function dataUrlToBytes(dataUrl: string) {
     throw new Error("Invalid QR image");
   }
 
-  return Uint8Array.from(Buffer.from(base64, "base64"));
+  return Uint8Array.from(
+    Buffer.from(base64, "base64")
+  );
 }
 
 async function loadImage(fileName: string) {
@@ -106,10 +118,12 @@ async function loadImage(fileName: string) {
 }
 
 /**
- * يرجع مكان القص الحقيقي للبطاقة.
+ * إحداثيات القص الحقيقية للبطاقة.
  *
- * هذا المكان لا يتغير حتى تبقى علامات القص
- * والـQR ورقم البطاقة على قياس 93 × 60 ملم.
+ * هذه الإحداثيات لا تتغير حتى يبقى:
+ * - قياس البطاقة 93 × 60 ملم
+ * - موضع علامات القص ثابتًا
+ * - الوجه والظهر متطابقين
  */
 function getCardPosition(position: number) {
   const column = position % COLUMNS;
@@ -133,19 +147,20 @@ function getCardPosition(position: number) {
     x,
     y,
     column,
+    row,
   };
 }
 
 /**
- * يرجع حدود صورة التصميم مع زيادة Bleed باتجاه الوسط فقط.
+ * تمديد صورة التصميم باتجاه المساحة الوسطية فقط.
  *
- * العمود الأيسر:
- * يبقى من جهة اليسار كما هو ويتمدد 1.5 ملم لليمين.
+ * البطاقة الموجودة في العمود الأول:
+ * تتمدد 1.5 ملم نحو اليمين.
  *
- * العمود الأيمن:
- * يتحرك 1.5 ملم لليسار ويتمدد عرضه 1.5 ملم.
+ * البطاقة الموجودة في العمود الثاني:
+ * تتحرك 1.5 ملم نحو اليسار وتتمدد.
  *
- * قياس القص لا يتغير.
+ * علامات القص تبقى على قياس البطاقة الأصلي.
  */
 function getArtworkBounds(
   position: number,
@@ -172,6 +187,39 @@ function getArtworkBounds(
     y,
     width: cardWidth + innerBleed,
     height: cardHeight,
+  };
+}
+
+/**
+ * حساب موضع QR.
+ *
+ * بسبب الانعكاس الأفقي الكامل:
+ * العمود رقم 0 يظهر على يمين الصفحة بعد الانعكاس.
+ *
+ * لذلك نزيد X للعمود رقم 0 بمقدار 1 ملم،
+ * فيظهر QR النهائي متحركًا إلى اليسار.
+ */
+function getQrPosition(
+  x: number,
+  y: number,
+  column: number
+) {
+  const qrHorizontalAdjustment =
+    column === 0
+      ? RIGHT_VISIBLE_QR_SHIFT_MM
+      : 0;
+
+  return {
+    x:
+      x +
+      mm(
+        QR_OFFSET_X_MM +
+          qrHorizontalAdjustment
+      ),
+
+    y:
+      y +
+      mm(QR_OFFSET_Y_MM),
   };
 }
 
@@ -267,12 +315,95 @@ function drawCropMarks(
   );
 }
 
+/**
+ * رسم CARD ID على ظهر البطاقة.
+ *
+ * الرقم:
+ * - في منتصف البطاقة أفقيًا
+ * - فوق معلومات التواصل
+ * - بخط واضح وعريض
+ * - باللون البرتقالي
+ */
+function drawCardId(
+  page: PDFPage,
+  cardCode: string,
+  x: number,
+  y: number,
+  cardWidth: number,
+  font: PDFFont
+) {
+  const cardIdText =
+    `CARD ID: ${cardCode}`;
+
+  const textWidth =
+    font.widthOfTextAtSize(
+      cardIdText,
+      CARD_ID_FONT_SIZE_PT
+    );
+
+  const textX =
+    x +
+    (cardWidth - textWidth) / 2;
+
+  const textY =
+    y +
+    mm(CARD_ID_BOTTOM_MM);
+
+  page.drawText(cardIdText, {
+    x: textX,
+    y: textY,
+    size: CARD_ID_FONT_SIZE_PT,
+    font,
+    color: rgb(1, 0.42, 0),
+  });
+}
+
+/**
+ * رسم رقم الورقة داخل الممر الأبيض الوسطي.
+ *
+ * رقم الوجه والظهر يكون واحدًا:
+ *
+ * الصفحة الأولى: SHEET 1
+ * الصفحة الثانية: SHEET 1
+ * الصفحة الثالثة: SHEET 2
+ * الصفحة الرابعة: SHEET 2
+ */
+function drawSheetLabel(
+  page: PDFPage,
+  sheetNumber: number,
+  pageWidth: number,
+  pageHeight: number,
+  font: PDFFont
+) {
+  const label =
+    `SHEET ${sheetNumber}`;
+
+  const labelWidth =
+    font.widthOfTextAtSize(
+      label,
+      SHEET_LABEL_FONT_SIZE_PT
+    );
+
+  const centerX = pageWidth / 2;
+  const centerY = pageHeight / 2;
+
+  page.drawText(label, {
+    x: centerX + mm(1.7),
+    y: centerY - labelWidth / 2,
+    size: SHEET_LABEL_FONT_SIZE_PT,
+    font,
+    color: rgb(0.18, 0.18, 0.18),
+    rotate: degrees(90),
+  });
+}
+
 export async function GET(
   _request: NextRequest,
   context: RouteContext
 ) {
   try {
-    const { id: batchId } = await context.params;
+    const { id: batchId } =
+      await context.params;
 
     if (!batchId) {
       return NextResponse.json(
@@ -303,37 +434,40 @@ export async function GET(
       );
     }
 
-    const adminSupabase = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    );
+    const adminSupabase =
+      createClient(
+        supabaseUrl,
+        serviceRoleKey,
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        }
+      );
 
-    const [batchResult, cardsResult] =
-      await Promise.all([
-        adminSupabase
-          .from("card_batches")
-          .select(
-            "id, batch_code, quantity, status, created_at"
-          )
-          .eq("id", batchId)
-          .maybeSingle(),
+    const [
+      batchResult,
+      cardsResult,
+    ] = await Promise.all([
+      adminSupabase
+        .from("card_batches")
+        .select(
+          "id, batch_code, quantity, status, created_at"
+        )
+        .eq("id", batchId)
+        .maybeSingle(),
 
-        adminSupabase
-          .from("cards")
-          .select(
-            "id, card_code, status, batch_id"
-          )
-          .eq("batch_id", batchId)
-          .order("card_code", {
-            ascending: true,
-          }),
-      ]);
+      adminSupabase
+        .from("cards")
+        .select(
+          "id, card_code, status, batch_id"
+        )
+        .eq("batch_id", batchId)
+        .order("card_code", {
+          ascending: true,
+        }),
+    ]);
 
     if (batchResult.error) {
       throw batchResult.error;
@@ -346,7 +480,8 @@ export async function GET(
     if (!batchResult.data) {
       return NextResponse.json(
         {
-          error: "لم يتم العثور على الدفعة",
+          error:
+            "لم يتم العثور على الدفعة",
         },
         {
           status: 404,
@@ -363,7 +498,8 @@ export async function GET(
     if (cards.length === 0) {
       return NextResponse.json(
         {
-          error: "لا توجد بطاقات داخل الدفعة",
+          error:
+            "لا توجد بطاقات داخل الدفعة",
         },
         {
           status: 400,
@@ -374,11 +510,13 @@ export async function GET(
     const pdfDocument =
       await PDFDocument.create();
 
-    const [frontImageBytes, backImageBytes] =
-      await Promise.all([
-        loadImage("card-front.png"),
-        loadImage("card-back.png"),
-      ]);
+    const [
+      frontImageBytes,
+      backImageBytes,
+    ] = await Promise.all([
+      loadImage("card-front.png"),
+      loadImage("card-back.png"),
+    ]);
 
     const frontImage =
       await pdfDocument.embedPng(
@@ -390,31 +528,44 @@ export async function GET(
         backImageBytes
       );
 
-    const cardIdFont =
+    const boldFont =
       await pdfDocument.embedFont(
         StandardFonts.HelveticaBold
       );
 
-    const pageWidth = mm(SHEET_WIDTH_MM);
-    const pageHeight = mm(SHEET_HEIGHT_MM);
+    const pageWidth =
+      mm(SHEET_WIDTH_MM);
 
-    const cardWidth = mm(CARD_WIDTH_MM);
-    const cardHeight = mm(CARD_HEIGHT_MM);
+    const pageHeight =
+      mm(SHEET_HEIGHT_MM);
 
-    const qrSize = mm(QR_SIZE_MM);
+    const cardWidth =
+      mm(CARD_WIDTH_MM);
+
+    const cardHeight =
+      mm(CARD_HEIGHT_MM);
+
+    const qrSize =
+      mm(QR_SIZE_MM);
 
     for (
       let sheetStart = 0;
       sheetStart < cards.length;
       sheetStart += CARDS_PER_SHEET
     ) {
-      const sheetCards = cards.slice(
-        sheetStart,
-        sheetStart + CARDS_PER_SHEET
-      );
+      const sheetCards =
+        cards.slice(
+          sheetStart,
+          sheetStart + CARDS_PER_SHEET
+        );
+
+      const sheetNumber =
+        Math.floor(
+          sheetStart / CARDS_PER_SHEET
+        ) + 1;
 
       // =================================================
-      // الصفحة الأمامية — انعكاس أفقي كامل مثل المرآة
+      // الصفحة الأمامية
       // =================================================
 
       const frontPage =
@@ -427,6 +578,7 @@ export async function GET(
         pushGraphicsState()
       );
 
+      // انعكاس أفقي كامل
       frontPage.pushOperators(
         concatTransformationMatrix(
           -1,
@@ -443,10 +595,14 @@ export async function GET(
         position < sheetCards.length;
         position += 1
       ) {
-        const card = sheetCards[position];
+        const card =
+          sheetCards[position];
 
-        const { x, y } =
-          getCardPosition(position);
+        const {
+          x,
+          y,
+          column,
+        } = getCardPosition(position);
 
         const artwork =
           getArtworkBounds(
@@ -455,13 +611,15 @@ export async function GET(
             y
           );
 
-        // صورة الوجه مع امتداد 1.5 ملم باتجاه الوسط
-        frontPage.drawImage(frontImage, {
-          x: artwork.x,
-          y: artwork.y,
-          width: artwork.width,
-          height: artwork.height,
-        });
+        frontPage.drawImage(
+          frontImage,
+          {
+            x: artwork.x,
+            y: artwork.y,
+            width: artwork.width,
+            height: artwork.height,
+          }
+        );
 
         const cardUrl =
           `${SITE_ORIGIN}/card/` +
@@ -488,57 +646,23 @@ export async function GET(
             dataUrlToBytes(qrDataUrl)
           );
 
-        const qrX =
-          x + mm(QR_OFFSET_X_MM);
-
-        const qrY =
-          y + mm(QR_OFFSET_Y_MM);
-
-        frontPage.drawImage(qrImage, {
-          x: qrX,
-          y: qrY,
-          width: qrSize,
-          height: qrSize,
-        });
-
-        // =================================================
-        // رقم البطاقة الحقيقي
-        // مثال: CARD ID: NX-000107
-        // =================================================
-
-        const cardIdText =
-          `CARD ID: ${card.card_code}`;
-
-        const cardIdTextWidth =
-          cardIdFont.widthOfTextAtSize(
-            cardIdText,
-            CARD_ID_FONT_SIZE_PT
+        const qrPosition =
+          getQrPosition(
+            x,
+            y,
+            column
           );
 
-        // توسيط الرقم تحت الـQR
-        const cardIdX =
-          qrX +
-          (qrSize - cardIdTextWidth) / 2;
-
-        const cardIdY =
-          y + mm(CARD_ID_OFFSET_Y_MM);
-
-        frontPage.drawText(
-          cardIdText,
+        frontPage.drawImage(
+          qrImage,
           {
-            x: cardIdX,
-            y: cardIdY,
-            size: CARD_ID_FONT_SIZE_PT,
-            font: cardIdFont,
-            color: rgb(
-              0.92,
-              0.92,
-              0.92
-            ),
+            x: qrPosition.x,
+            y: qrPosition.y,
+            width: qrSize,
+            height: qrSize,
           }
         );
 
-        // علامات القص تبقى حسب القياس الأصلي
         drawCropMarks(
           frontPage,
           x,
@@ -552,8 +676,17 @@ export async function GET(
         popGraphicsState()
       );
 
+      // رقم الورقة يبقى غير معكوس
+      drawSheetLabel(
+        frontPage,
+        sheetNumber,
+        pageWidth,
+        pageHeight,
+        boldFont
+      );
+
       // =================================================
-      // الصفحة الخلفية — انعكاس أفقي كامل مثل المرآة
+      // الصفحة الخلفية
       // =================================================
 
       const backPage =
@@ -566,6 +699,7 @@ export async function GET(
         pushGraphicsState()
       );
 
+      // نفس الانعكاس الأفقي المستخدم في الوجه
       backPage.pushOperators(
         concatTransformationMatrix(
           -1,
@@ -582,8 +716,20 @@ export async function GET(
         position < sheetCards.length;
         position += 1
       ) {
-        const { x, y } =
-          getCardPosition(position);
+        /*
+         * مهم:
+         * نفس البطاقة ونفس position المستخدمين
+         * في صفحة الوجه.
+         *
+         * لذلك كل QR يقابله CARD ID الصحيح.
+         */
+        const card =
+          sheetCards[position];
+
+        const {
+          x,
+          y,
+        } = getCardPosition(position);
 
         const artwork =
           getArtworkBounds(
@@ -592,15 +738,25 @@ export async function GET(
             y
           );
 
-        // صورة الظهر مع امتداد 1.5 ملم باتجاه الوسط
-        backPage.drawImage(backImage, {
-          x: artwork.x,
-          y: artwork.y,
-          width: artwork.width,
-          height: artwork.height,
-        });
+        backPage.drawImage(
+          backImage,
+          {
+            x: artwork.x,
+            y: artwork.y,
+            width: artwork.width,
+            height: artwork.height,
+          }
+        );
 
-        // علامات القص تبقى حسب القياس الأصلي
+        drawCardId(
+          backPage,
+          card.card_code,
+          x,
+          y,
+          cardWidth,
+          boldFont
+        );
+
         drawCropMarks(
           backPage,
           x,
@@ -612,6 +768,15 @@ export async function GET(
 
       backPage.pushOperators(
         popGraphicsState()
+      );
+
+      // نفس رقم ورقة الوجه
+      drawSheetLabel(
+        backPage,
+        sheetNumber,
+        pageWidth,
+        pageHeight,
+        boldFont
       );
     }
 
