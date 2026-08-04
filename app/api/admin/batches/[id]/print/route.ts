@@ -74,13 +74,6 @@ const QR_OFFSET_Y_MM = 8.2;
 // لأن الصفحة معكوسة أفقيًا، نزيد X قبل الانعكاس
 const RIGHT_VISIBLE_QR_SHIFT_MM = 1;
 
-// إعدادات CARD ID في ظهر البطاقة
-const CARD_ID_FONT_SIZE_PT = 9.5;
-
-// موقع الرقم من أسفل البطاقة
-// موضوع بالمنتصف وفوق معلومات التواصل
-const CARD_ID_BOTTOM_MM = 11.5;
-
 // إعداد رقم الورقة في المساحة الوسطية
 const SHEET_LABEL_FONT_SIZE_PT = 10;
 
@@ -316,49 +309,6 @@ function drawCropMarks(
 }
 
 /**
- * رسم CARD ID على ظهر البطاقة.
- *
- * الرقم:
- * - في منتصف البطاقة أفقيًا
- * - فوق معلومات التواصل
- * - بخط واضح وعريض
- * - باللون البرتقالي
- */
-function drawCardId(
-  page: PDFPage,
-  cardCode: string,
-  x: number,
-  y: number,
-  cardWidth: number,
-  font: PDFFont
-) {
-  const cardIdText =
-    `CARD ID: ${cardCode}`;
-
-  const textWidth =
-    font.widthOfTextAtSize(
-      cardIdText,
-      CARD_ID_FONT_SIZE_PT
-    );
-
-  const textX =
-    x +
-    (cardWidth - textWidth) / 2;
-
-  const textY =
-    y +
-    mm(CARD_ID_BOTTOM_MM);
-
-  page.drawText(cardIdText, {
-    x: textX,
-    y: textY,
-    size: CARD_ID_FONT_SIZE_PT,
-    font,
-    color: rgb(1, 0.42, 0),
-  });
-}
-
-/**
  * رسم رقم الورقة داخل الممر الأبيض الوسطي.
  *
  * رقم الوجه والظهر يكون واحدًا:
@@ -548,6 +498,8 @@ export async function GET(
     const qrSize =
       mm(QR_SIZE_MM);
 
+    let pageNumber = 1;
+
     for (
       let sheetStart = 0;
       sheetStart < cards.length;
@@ -558,11 +510,6 @@ export async function GET(
           sheetStart,
           sheetStart + CARDS_PER_SHEET
         );
-
-      const sheetNumber =
-        Math.floor(
-          sheetStart / CARDS_PER_SHEET
-        ) + 1;
 
       // =================================================
       // الصفحة الأمامية
@@ -679,7 +626,7 @@ export async function GET(
       // رقم الورقة يبقى غير معكوس
       drawSheetLabel(
         frontPage,
-        sheetNumber,
+        pageNumber++,
         pageWidth,
         pageHeight,
         boldFont
@@ -748,15 +695,6 @@ export async function GET(
           }
         );
 
-        drawCardId(
-          backPage,
-          card.card_code,
-          x,
-          y,
-          cardWidth,
-          boldFont
-        );
-
         drawCropMarks(
           backPage,
           x,
@@ -773,7 +711,7 @@ export async function GET(
       // نفس رقم ورقة الوجه
       drawSheetLabel(
         backPage,
-        sheetNumber,
+        pageNumber++,
         pageWidth,
         pageHeight,
         boldFont
