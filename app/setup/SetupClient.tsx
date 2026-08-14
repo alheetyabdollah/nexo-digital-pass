@@ -65,8 +65,11 @@ export default function SetupClient({
 
   const [step, setStep] = useState(1);
 
-  const [password, setPassword] =
-    useState("");
+const [customerName, setCustomerName] =
+  useState("");
+
+const [password, setPassword] =
+  useState("");
 
   const [
     confirmPassword,
@@ -243,7 +246,8 @@ export default function SetupClient({
       const { data, error } = await supabase
         .from("cards")
         .update({
-          status: "Activated",
+  status: "Activated",
+  customer_name: customerName.trim(),
 
           encrypted_vault_key:
             encryptedVaultKey,
@@ -379,7 +383,20 @@ export default function SetupClient({
             <p className="mt-4 text-gray-400">
               لنجهز خزنتك خلال أقل من دقيقة.
             </p>
-
+<div className="mt-8">
+  <input
+    type="text"
+    placeholder="اكتب اسمك"
+    value={customerName}
+    onChange={(event) => {
+      setCustomerName(event.target.value);
+      setStatus("");
+    }}
+    autoComplete="name"
+    maxLength={60}
+    className="h-16 w-full rounded-2xl border border-white/10 bg-black/50 px-5 text-right text-white outline-none transition focus:border-orange-500"
+  />
+</div>
             {status && (
               <p className="mt-5 font-bold text-red-400">
                 {status}
@@ -390,9 +407,17 @@ export default function SetupClient({
               type="button"
               disabled={Boolean(status)}
               onClick={() => {
-                setStatus("");
-                setStep(2);
-              }}
+  const cleanName = customerName.trim();
+
+  if (cleanName.length < 2) {
+    setStatus("يرجى كتابة اسمك");
+    return;
+  }
+
+  setCustomerName(cleanName);
+  setStatus("");
+  setStep(2);
+}}
               className="mt-10 w-full rounded-3xl bg-orange-500 py-5 font-bold transition hover:bg-orange-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               ابدأ

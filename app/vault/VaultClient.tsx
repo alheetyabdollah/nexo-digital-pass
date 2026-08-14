@@ -143,7 +143,8 @@ export default function VaultClient() {
 
   const [cardId, setCardId] =
     useState<string | null>(null);
-
+const [customerName, setCustomerName] =
+  useState("");
   const [loadError, setLoadError] =
     useState("");
 
@@ -222,7 +223,7 @@ export default function VaultClient() {
       } = await supabase
         .from("cards")
         .select(
-          "id, status, crypto_version"
+         "id, status, crypto_version, customer_name"
         )
         .eq("card_code", cardCode)
         .maybeSingle();
@@ -274,7 +275,9 @@ export default function VaultClient() {
       }
 
       setCardId(card.id);
-
+setCustomerName(
+  card.customer_name?.trim() || ""
+);
       const {
         data: accountData,
         error: accountsError,
@@ -466,12 +469,14 @@ export default function VaultClient() {
                 className="min-w-0 flex-1"
               >
                 <p className="text-xl font-bold text-white">
-                  مرحبًا بك في
-                </p>
+  {customerName
+    ? `مرحبًا، ${customerName}`
+    : "مرحبًا بك في"}
+</p>
 
-                <h2 className="mt-1 text-[34px] font-black tracking-tight text-orange-500">
-                  خزنتك الرقمية
-                </h2>
+<h2 className="mt-1 text-[34px] font-black tracking-tight text-orange-500">
+  خزنتك الرقمية
+</h2>
 
                 <div className="mt-4 space-y-3 text-sm leading-7 text-white/75">
                   <p className="flex items-start gap-2">
