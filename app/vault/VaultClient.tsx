@@ -1,4 +1,5 @@
 "use client";
+
 import BottomNavigation from "@/components/layout/BottomNavigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -47,6 +48,14 @@ import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 
 type ServiceCount = {
   service: string;
+};
+
+type VaultSummary = {
+  id: string;
+  status: string;
+  crypto_version: number | null;
+  customer_name: string | null;
+  accounts: ServiceCount[] | null;
 };
 
 const apps = [
@@ -218,20 +227,19 @@ const [customerName, setCustomerName] =
       }
 
       const {
-        data: card,
-        error: cardError,
-      } = await supabase
-        .from("cards")
-        .select(
-         "id, status, crypto_version, customer_name"
-        )
-        .eq("card_code", cardCode)
-        .maybeSingle();
+        data: rawSummary,
+        error: summaryError,
+      } = await supabase.rpc(
+        "nexo_get_web_vault_summary",
+        {
+          p_card_code: cardCode,
+        }
+      );
 
       if (cancelled) return;
 
-      if (cardError) {
-        console.error(cardError);
+      if (summaryError) {
+        console.error(summaryError);
 
         setLoadError(
           "حدث خطأ أثناء تحميل البطاقة"
@@ -240,6 +248,9 @@ const [customerName, setCustomerName] =
         setLoading(false);
         return;
       }
+
+      const card =
+        rawSummary as VaultSummary | null;
 
       if (!card) {
         lockSession();
@@ -275,31 +286,14 @@ const [customerName, setCustomerName] =
       }
 
       setCardId(card.id);
-setCustomerName(
-  card.customer_name?.trim() || ""
-);
-      const {
-        data: accountData,
-        error: accountsError,
-      } = await supabase
-        .from("accounts")
-        .select("service")
-        .eq("card_id", card.id);
-
-      if (cancelled) return;
-
-      if (accountsError) {
-        console.error(accountsError);
-
-        setLoadError(
-          "حدث خطأ أثناء تحميل الحسابات"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      setAccounts(accountData || []);
+      setCustomerName(
+        card.customer_name?.trim() || ""
+      );
+      setAccounts(
+        Array.isArray(card.accounts)
+          ? card.accounts
+          : []
+      );
       setLoading(false);
     }
 
