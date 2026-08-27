@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -254,13 +253,7 @@ export default function VaultSessionProvider({
       [requireSessionCardCode]
     );
 
-  useEffect(() => {
-    return () => {
-      clearVaultSession();
-    };
-  }, []);
-
-  const value =
+    const value =
     useMemo<VaultSessionContextValue>(
       () => ({
         isUnlocked:
