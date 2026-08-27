@@ -12,9 +12,9 @@ import {
 import {
   clearVaultSession,
   establishVaultSession,
+  getActiveCardCode,
   hasActiveVaultSession,
 } from "@/lib/crypto/session";
-
 import {
   decryptOptionalVaultText,
   decryptVaultText,
@@ -79,10 +79,16 @@ export default function VaultSessionProvider({
   children,
 }: VaultSessionProviderProps) {
   const [cardCode, setCardCode] =
-    useState<string | null>(null);
+  useState<string | null>(() =>
+    getActiveCardCode()
+  );
 
-  const [unlockedAt, setUnlockedAt] =
-    useState<number | null>(null);
+const [unlockedAt, setUnlockedAt] =
+  useState<number | null>(() =>
+    hasActiveVaultSession()
+      ? Date.now()
+      : null
+  );
 
   const requireSessionCardCode =
     useCallback(
