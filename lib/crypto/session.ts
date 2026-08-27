@@ -1,7 +1,35 @@
 import { importVaultKey } from "./vault";
 
-let activeVaultKey: CryptoKey | null = null;
-let activeCardCode: string | null = null;
+type VaultSessionMemory = {
+  activeVaultKey: CryptoKey | null;
+  activeCardCode: string | null;
+};
+
+type NexoWindow = Window & {
+  __NEXO_VAULT_SESSION__?: VaultSessionMemory;
+};
+
+const serverFallback: VaultSessionMemory = {
+  activeVaultKey: null,
+  activeCardCode: null,
+};
+
+function getVaultSessionMemory(): VaultSessionMemory {
+  if (typeof window === "undefined") {
+    return serverFallback;
+  }
+
+  const nexoWindow = window as NexoWindow;
+
+  if (!nexoWindow.__NEXO_VAULT_SESSION__) {
+    nexoWindow.__NEXO_VAULT_SESSION__ = {
+      activeVaultKey: null,
+      activeCardCode: null,
+    };
+  }
+
+  return nexoWindow.__NEXO_VAULT_SESSION__;
+}
 
 export async function establishVaultSession(params: {
   cardCode: string;
@@ -22,8 +50,10 @@ export async function establishVaultSession(params: {
       params.vaultKeyBytes
     );
 
-    activeVaultKey = importedKey;
-    activeCardCode = cardCode;
+    const memory = getVaultSessionMemory();
+
+    memory.activeVaultKey = importedKey;
+    memory.activeCardCode = cardCode;
   } finally {
     // مسح نسخة البايتات الخام بعد تحويلها إلى CryptoKey.
     params.vaultKeyBytes.fill(0);
@@ -31,14 +61,21 @@ export async function establishVaultSession(params: {
 }
 
 export function clearVaultSession(): void {
-  activeVaultKey = null;
-  activeCardCode = null;
+  const memory = getVaultSessionMemory();
+
+  memory.activeVaultKey = null;
+  memory.activeCardCode = null;
 }
 
 export function hasActiveVaultSession(
   cardCode?: string
 ): boolean {
-  if (!activeVaultKey || !activeCardCode) {
+  const memory = getVaultSessionMemory();
+
+  if (
+    !memory.activeVaultKey ||
+    !memory.activeCardCode
+  ) {
     return false;
   }
 
@@ -46,28 +83,37 @@ export function hasActiveVaultSession(
     return true;
   }
 
-  return activeCardCode === cardCode.trim();
+  return (
+    memory.activeCardCode ===
+    cardCode.trim()
+  );
 }
 
 export function requireActiveVaultKey(
   cardCode?: string
 ): CryptoKey {
-  if (!activeVaultKey || !activeCardCode) {
+  const memory = getVaultSessionMemory();
+
+  if (
+    !memory.activeVaultKey ||
+    !memory.activeCardCode
+  ) {
     throw new Error("الخزنة مقفلة");
   }
 
   if (
     cardCode &&
-    activeCardCode !== cardCode.trim()
+    memory.activeCardCode !==
+      cardCode.trim()
   ) {
     throw new Error(
       "جلسة الخزنة لا تخص هذه البطاقة"
     );
   }
 
-  return activeVaultKey;
+  return memory.activeVaultKey;
 }
 
 export function getActiveCardCode(): string | null {
-  return activeCardCode;
+  return getVaultSessionMemory().activeCardCode;
 }
