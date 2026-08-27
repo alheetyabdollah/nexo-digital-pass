@@ -57,20 +57,15 @@ export default function UnlockPage({
     setStatus("جاري التحقق...");
 
     try {
-      const { data, error } = await supabase
-        .from("cards")
-        .select(
-          [
-            "status",
-            "crypto_version",
-            "kdf_algorithm",
-            "encrypted_vault_key",
-            "password_salt",
-            "password_iterations",
-          ].join(",")
-        )
-        .eq("card_code", cleanedCardCode)
-        .maybeSingle<UnlockCard>();
+      const {
+        data: rawCard,
+        error,
+      } = await supabase.rpc(
+        "nexo_get_web_unlock_card",
+        {
+          p_card_code: cleanedCardCode,
+        }
+      );
 
       if (error) {
         console.error(error);
@@ -79,6 +74,8 @@ export default function UnlockPage({
         );
         return;
       }
+
+      const data = rawCard as UnlockCard | null;
 
       if (!data) {
         setStatus("تعذر العثور على البطاقة");

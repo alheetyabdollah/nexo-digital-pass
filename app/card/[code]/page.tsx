@@ -5,28 +5,83 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+type CardCheckResult = {
+  card_code: string;
+  status: string | null;
+};
+
 export default function CardPage() {
   const params = useParams();
-  const code = params.code as string;
+
+  const rawCode = Array.isArray(params.code)
+    ? params.code[0]
+    : params.code;
+
+  const code = decodeURIComponent(rawCode ?? "")
+    .trim()
+    .toUpperCase();
 
   const [loading, setLoading] = useState(true);
   const [validCard, setValidCard] = useState(false);
   const [isActivated, setIsActivated] = useState(false);
+  const [isDisabled, setIsDisabled] = useState(false);
+  const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
-    async function checkCard() {
-      const { data } = await supabase
-        .from("cards")
-        .select("id, status, card_password_hash")
-        .eq("card_code", code)
-        .maybeSingle();
+    let active = true;
 
-      setValidCard(!!data);
-      setIsActivated(data?.status === "Activated" && !!data?.card_password_hash);
+    async function checkCard() {
+      try {
+        setLoading(true);
+        setErrorText("");
+
+        const { data, error } = await supabase.rpc(
+          "nexo_check_card",
+          {
+            p_card_code: code,
+          }
+        );
+
+        if (!active) {
+          return;
+        }
+
+        if (error) {
+          console.error("NEXO card check error:", error);
+          setValidCard(false);
+          setErrorText("تعذر التحقق من البطاقة حالياً.");
+          return;
+        }
+
+        const card = data as CardCheckResult | null;
+
+        setValidCard(!!card);
+        setIsActivated(card?.status === "Activated");
+        setIsDisabled(card?.status === "Disabled");
+      } catch (error) {
+        console.error("NEXO card check error:", error);
+
+        if (active) {
+          setValidCard(false);
+          setErrorText("تعذر التحقق من البطاقة حالياً.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    if (code) {
+      void checkCard();
+    } else {
+      setValidCard(false);
       setLoading(false);
     }
 
-    if (code) checkCard();
+    return () => {
+      active = false;
+    };
   }, [code]);
 
   if (loading) {
@@ -37,10 +92,26 @@ export default function CardPage() {
     );
   }
 
+  if (errorText) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#050505] px-5 text-center text-orange-500 text-xl">
+        {errorText}
+      </main>
+    );
+  }
+
   if (!validCard) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#050505] text-red-500 text-xl">
         البطاقة غير موجودة.
+      </main>
+    );
+  }
+
+  if (isDisabled) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#050505] px-5 text-center text-orange-500 text-xl">
+        هذه البطاقة متوقفة حالياً.
       </main>
     );
   }
