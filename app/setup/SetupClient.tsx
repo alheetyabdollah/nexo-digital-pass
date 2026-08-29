@@ -25,11 +25,20 @@ type SetupClientProps = {
 };
 
 type CardSetupState = {
-  id: string;
+  card_code: string;
   status: string;
-  card_password_hash: string | null;
-  encrypted_vault_key: string | null;
   crypto_version: number | null;
+  has_encrypted_vault_key: boolean;
+  has_legacy_password: boolean;
+  activation_mode:
+    | "legacy_v1"
+    | "secure_v2"
+    | null;
+};
+
+type ActivationResult = {
+  ok: boolean;
+  card_code?: string;
 };
 
 const PASSWORD_ITERATIONS = 600_000;
@@ -95,19 +104,16 @@ const [password, setPassword] =
       setChecking(true);
       setStatus("");
 
-      const { data, error } = await supabase
-        .from("cards")
-        .select(
-          [
-            "id",
-            "status",
-            "card_password_hash",
-            "encrypted_vault_key",
-            "crypto_version",
-          ].join(",")
-        )
-        .eq("card_code", cardCode)
-        .maybeSingle<CardSetupState>();
+      const { data, error } =
+        await supabase.rpc(
+          "nexo_web_check_card",
+          {
+            p_card_code: cardCode,
+          }
+        );
+
+      const card =
+        data as CardSetupState | null;
 
       if (cancelled) return;
 
@@ -122,12 +128,12 @@ const [password, setPassword] =
         return;
       }
 
-      if (!data) {
+      if (!card) {
         router.replace("/");
         return;
       }
 
-      if (data.status === "Disabled") {
+      if (card.status === "Disabled") {
         setStatus(
           "هذه البطاقة متوقفة حاليًا"
         );
@@ -137,13 +143,13 @@ const [password, setPassword] =
       }
 
       const isCryptoV2Activated =
-        data.status === "Activated" &&
-        data.crypto_version === CRYPTO_VERSION &&
-        Boolean(data.encrypted_vault_key);
+        card.status === "Activated" &&
+        card.crypto_version === CRYPTO_VERSION &&
+        card.has_encrypted_vault_key;
 
       const isLegacyActivated =
-        data.status === "Activated" &&
-        Boolean(data.card_password_hash);
+        card.status === "Activated" &&
+        card.has_legacy_password;
 
       if (
         isCryptoV2Activated ||
@@ -158,9 +164,26 @@ const [password, setPassword] =
         return;
       }
 
-      if (data.status !== "New") {
+      if (card.status !== "New") {
         setStatus(
           "حالة البطاقة لا تسمح بإنشاء خزنة جديدة"
+        );
+
+        setChecking(false);
+        return;
+      }
+
+      /*
+       * بطاقات secure_v2 الجديدة تبقى على
+       * مسار التفعيل الآمن الخاص بها.
+       * هذا المسار مخصص للبطاقات المطبوعة
+       * القديمة التي تحتوي QR برقم البطاقة فقط.
+       */
+      if (
+        card.activation_mode === "secure_v2"
+      ) {
+        setStatus(
+          "هذه البطاقة تحتاج مسار التفعيل الآمن"
         );
 
         setChecking(false);
@@ -243,49 +266,42 @@ const [password, setPassword] =
           recoveryWrappingKey
         );
 
-      const { data, error } = await supabase
-        .from("cards")
-        .update({
-  status: "Activated",
-  customer_name: customerName.trim(),
+      const { data, error } =
+        await supabase.rpc(
+          "nexo_web_activate_legacy_card",
+          {
+            p_card_code: cardCode,
+            p_customer_name:
+              customerName.trim(),
 
-          encrypted_vault_key:
-            encryptedVaultKey,
+            p_encrypted_vault_key:
+              encryptedVaultKey,
 
-          recovery_encrypted_vault_key:
-            recoveryEncryptedVaultKey,
+            p_recovery_encrypted_vault_key:
+              recoveryEncryptedVaultKey,
 
-          password_salt:
-            passwordSalt,
+            p_password_salt:
+              passwordSalt,
 
-          recovery_salt:
-            recoverySalt,
+            p_recovery_salt:
+              recoverySalt,
 
-          password_iterations:
-            PASSWORD_ITERATIONS,
+            p_password_iterations:
+              PASSWORD_ITERATIONS,
 
-          recovery_iterations:
-            RECOVERY_ITERATIONS,
+            p_recovery_iterations:
+              RECOVERY_ITERATIONS,
 
-          crypto_version:
-            CRYPTO_VERSION,
+            p_crypto_version:
+              CRYPTO_VERSION,
 
-          kdf_algorithm:
-            KDF_ALGORITHM,
+            p_kdf_algorithm:
+              KDF_ALGORITHM,
+          }
+        );
 
-          /*
-           * Crypto v2 لا يعتمد على SHA-256
-           * سريع للتحقق من كلمة المرور.
-           * نجاح فك encrypted_vault_key هو
-           * التحقق الحقيقي.
-           */
-          card_password_hash: null,
-          recovery_key_hash: null,
-        })
-        .eq("card_code", cardCode)
-        .eq("status", "New")
-        .select("id")
-        .maybeSingle();
+      const activationResult =
+        data as ActivationResult | null;
 
       if (error) {
         console.error(error);
@@ -297,9 +313,9 @@ const [password, setPassword] =
         return;
       }
 
-      if (!data) {
+      if (!activationResult?.ok) {
         setStatus(
-          "لم يتم تفعيل البطاقة؛ قد تكون مفعلة مسبقًا"
+          "لم يتم تفعيل البطاقة؛ قد تكون مفعلة مسبقًا أو ليست من الدفعة الأولى"
         );
 
         return;
