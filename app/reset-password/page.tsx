@@ -12,177 +12,295 @@ export default function ResetPasswordPage() {
   const router = useRouter();
 
   const [ready, setReady] = useState(false);
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] =
+
+  const [factorId, setFactorId] =
     useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+
+  const [mfaVerified, setMfaVerified] =
+    useState(false);
+
+  const [totpCode, setTotpCode] =
+    useState("");
+
+  const [verifyingMfa, setVerifyingMfa] =
+    useState(false);
+
+  const [password, setPassword] =
+    useState("");
+
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState("");
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
 
   useEffect(() => {
     let active = true;
 
-    const prepareRecoverySession = async () => {
-      try {
-        setError("");
+    const prepareRecoverySession =
+      async () => {
+        try {
+          setError("");
 
-        // 1) يمكن Supabase أنشأ الجلسة تلقائياً
-        const {
-          data: sessionData,
-        } = await supabase.auth.getSession();
+          let sessionExists = false;
 
-        if (sessionData.session) {
-          if (active) {
-            setReady(true);
+          const url = new URL(
+            window.location.href
+          );
+
+          // =====================================
+          // 1) PKCE recovery link: ?code=...
+          // =====================================
+
+          const code =
+            url.searchParams.get("code");
+
+          if (code) {
+            const {
+              data,
+              error: exchangeError,
+            } =
+              await supabase.auth
+                .exchangeCodeForSession(
+                  code
+                );
+
+            if (
+              exchangeError ||
+              !data.session
+            ) {
+              console.error(
+                "Recovery code exchange error:",
+                exchangeError
+              );
+
+              if (active) {
+                setError(
+                  "تعذر التحقق من رابط الاستعادة. اطلب رابطًا جديدًا."
+                );
+              }
+
+              return;
+            }
+
+            sessionExists = true;
+
+            window.history.replaceState(
+              {},
+              document.title,
+              "/reset-password"
+            );
           }
 
-          return;
-        }
+          // =====================================
+          // 2) Legacy recovery link:
+          // #access_token=...
+          // =====================================
 
-        const url = new URL(
-          window.location.href
-        );
+          if (
+            !sessionExists &&
+            window.location.hash
+          ) {
+            const params =
+              new URLSearchParams(
+                window.location.hash.substring(
+                  1
+                )
+              );
 
-        // 2) دعم PKCE: ?code=...
-        const code =
-          url.searchParams.get("code");
+            const accessToken =
+              params.get(
+                "access_token"
+              );
 
-        if (code) {
+            const refreshToken =
+              params.get(
+                "refresh_token"
+              );
+
+            const type =
+              params.get("type");
+
+            if (
+              type === "recovery" &&
+              accessToken &&
+              refreshToken
+            ) {
+              const {
+                data,
+                error: sessionError,
+              } =
+                await supabase.auth
+                  .setSession({
+                    access_token:
+                      accessToken,
+                    refresh_token:
+                      refreshToken,
+                  });
+
+              if (
+                sessionError ||
+                !data.session
+              ) {
+                console.error(
+                  "Recovery setSession error:",
+                  sessionError
+                );
+
+                if (active) {
+                  setError(
+                    "تعذر التحقق من رابط الاستعادة. اطلب رابطًا جديدًا."
+                  );
+                }
+
+                return;
+              }
+
+              sessionExists = true;
+
+              window.history.replaceState(
+                {},
+                document.title,
+                "/reset-password"
+              );
+            }
+          }
+
+          // =====================================
+          // 3) Maybe session already exists
+          // =====================================
+
+          if (!sessionExists) {
+            const {
+              data,
+              error:
+                existingSessionError,
+            } =
+              await supabase.auth
+                .getSession();
+
+            if (
+              existingSessionError ||
+              !data.session
+            ) {
+              if (active) {
+                setError(
+                  "رابط استعادة كلمة المرور غير صالح أو منتهي."
+                );
+              }
+
+              return;
+            }
+
+            sessionExists = true;
+          }
+
+          // =====================================
+          // 4) Check current AAL
+          // =====================================
+
           const {
-            data,
-            error: exchangeError,
+            data: aalData,
+            error: aalError,
           } =
-            await supabase.auth
-              .exchangeCodeForSession(code);
+            await supabase.auth.mfa
+              .getAuthenticatorAssuranceLevel();
 
-          if (
-            exchangeError ||
-            !data.session
-          ) {
+          if (aalError) {
             console.error(
-              "Recovery code exchange error:",
-              exchangeError
+              "Recovery AAL error:",
+              aalError
             );
 
             if (active) {
               setError(
-                "تعذر التحقق من رابط الاستعادة. اطلب رابطًا جديدًا."
+                "تعذر التحقق من مستوى الأمان للحساب."
               );
             }
 
             return;
           }
 
-          // إزالة الكود من العنوان
-          window.history.replaceState(
-            {},
-            document.title,
-            "/reset-password"
-          );
-
-          if (active) {
-            setReady(true);
-          }
-
-          return;
-        }
-
-        // 3) دعم الرابط القديم:
-        // #access_token=...&refresh_token=...
-        const hash =
-          window.location.hash;
-
-        if (hash) {
-          const params =
-            new URLSearchParams(
-              hash.substring(1)
-            );
-
-          const accessToken =
-            params.get("access_token");
-
-          const refreshToken =
-            params.get("refresh_token");
-
-          const type =
-            params.get("type");
-
+          // Already verified with MFA
           if (
-            type !== "recovery" ||
-            !accessToken ||
-            !refreshToken
+            aalData.currentLevel ===
+            "aal2"
           ) {
             if (active) {
-              setError(
-                "رابط استعادة كلمة المرور غير صالح أو منتهي."
-              );
+              setMfaVerified(true);
+              setReady(true);
             }
 
             return;
           }
+
+          // =====================================
+          // 5) Find enrolled TOTP factor
+          // =====================================
 
           const {
-            data,
-            error: sessionError,
+            data: factorsData,
+            error: factorsError,
           } =
-            await supabase.auth
-              .setSession({
-                access_token:
-                  accessToken,
-                refresh_token:
-                  refreshToken,
-              });
+            await supabase.auth.mfa
+              .listFactors();
 
-          if (
-            sessionError ||
-            !data.session
-          ) {
+          if (factorsError) {
             console.error(
-              "Recovery setSession error:",
-              sessionError
+              "Recovery listFactors error:",
+              factorsError
             );
 
             if (active) {
               setError(
-                "تعذر التحقق من رابط الاستعادة. اطلب رابطًا جديدًا."
+                "تعذر قراءة إعدادات المصادقة الثنائية."
               );
             }
 
             return;
           }
 
-          // إزالة التوكنات من العنوان
-          window.history.replaceState(
-            {},
-            document.title,
-            "/reset-password"
+          const totpFactor =
+            factorsData.totp[0];
+
+          if (!totpFactor) {
+            if (active) {
+              setError(
+                "لم يتم العثور على تطبيق مصادقة مرتبط بهذا الحساب."
+              );
+            }
+
+            return;
+          }
+
+          if (active) {
+            setFactorId(
+              totpFactor.id
+            );
+
+            setReady(true);
+          }
+        } catch (recoveryError) {
+          console.error(
+            "Prepare recovery error:",
+            recoveryError
           );
 
           if (active) {
-            setReady(true);
+            setError(
+              "حدث خطأ أثناء التحقق من رابط الاستعادة."
+            );
           }
-
-          return;
         }
-
-        if (active) {
-          setError(
-            "رابط استعادة كلمة المرور غير صالح أو منتهي."
-          );
-        }
-      } catch (recoveryError) {
-        console.error(
-          "Prepare recovery error:",
-          recoveryError
-        );
-
-        if (active) {
-          setError(
-            "حدث خطأ أثناء التحقق من رابط الاستعادة."
-          );
-        }
-      }
-    };
+      };
 
     void prepareRecoverySession();
 
@@ -190,6 +308,117 @@ export default function ResetPasswordPage() {
       active = false;
     };
   }, []);
+
+  // =========================================
+  // Verify Authenticator code
+  // =========================================
+
+  const handleVerifyMfa = async (
+    e: FormEvent
+  ) => {
+    e.preventDefault();
+
+    if (verifyingMfa) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+
+    const cleanCode =
+      totpCode
+        .replace(/\D/g, "")
+        .slice(0, 6);
+
+    if (cleanCode.length !== 6) {
+      setError(
+        "أدخل رمز المصادقة المكوّن من 6 أرقام."
+      );
+
+      return;
+    }
+
+    if (!factorId) {
+      setError(
+        "عامل المصادقة غير موجود. افتح رابط استعادة جديدًا."
+      );
+
+      return;
+    }
+
+    setVerifyingMfa(true);
+
+    try {
+      const {
+        error: verifyError,
+      } =
+        await supabase.auth.mfa
+          .challengeAndVerify({
+            factorId,
+            code: cleanCode,
+          });
+
+      if (verifyError) {
+        console.error(
+          "Recovery MFA verification error:",
+          verifyError
+        );
+
+        setTotpCode("");
+
+        setError(
+          "رمز المصادقة غير صحيح أو انتهت صلاحيته. أدخل الرمز الجديد الظاهر في التطبيق."
+        );
+
+        return;
+      }
+
+      // تأكد فعلياً أن الجلسة أصبحت AAL2
+      const {
+        data: aalData,
+        error: aalError,
+      } =
+        await supabase.auth.mfa
+          .getAuthenticatorAssuranceLevel();
+
+      if (
+        aalError ||
+        aalData.currentLevel !==
+          "aal2"
+      ) {
+        console.error(
+          "AAL2 verification failed:",
+          aalError,
+          aalData
+        );
+
+        setError(
+          "تم قبول الرمز، لكن تعذر رفع مستوى أمان الجلسة. حاول مرة أخرى."
+        );
+
+        return;
+      }
+
+      setTotpCode("");
+      setMfaVerified(true);
+      setMessage("");
+    } catch (mfaError) {
+      console.error(
+        "Recovery MFA error:",
+        mfaError
+      );
+
+      setError(
+        "حدث خطأ أثناء التحقق من رمز المصادقة."
+      );
+    } finally {
+      setVerifyingMfa(false);
+    }
+  };
+
+  // =========================================
+  // Change password
+  // =========================================
 
   const handleSubmit = async (
     e: FormEvent
@@ -203,7 +432,14 @@ export default function ResetPasswordPage() {
     setError("");
     setMessage("");
 
-    // نخليها 12 بدل 8
+    if (!mfaVerified) {
+      setError(
+        "يجب التحقق من رمز المصادقة أولاً."
+      );
+
+      return;
+    }
+
     if (password.length < 12) {
       setError(
         "كلمة المرور يجب أن تحتوي على 12 حرفًا على الأقل."
@@ -213,7 +449,8 @@ export default function ResetPasswordPage() {
     }
 
     if (
-      password !== confirmPassword
+      password !==
+      confirmPassword
     ) {
       setError(
         "كلمتا المرور غير متطابقتين."
@@ -225,20 +462,23 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     try {
-      // نتأكد أن الجلسة موجودة فعلاً
+      // نتأكد أن الجلسة ما زالت AAL2
       const {
-        data: sessionData,
-        error: sessionError,
+        data: aalData,
+        error: aalError,
       } =
-        await supabase.auth
-          .getSession();
+        await supabase.auth.mfa
+          .getAuthenticatorAssuranceLevel();
 
       if (
-        sessionError ||
-        !sessionData.session
+        aalError ||
+        aalData.currentLevel !==
+          "aal2"
       ) {
+        setMfaVerified(false);
+
         setError(
-          "جلسة استعادة كلمة المرور انتهت. اطلب رابط استعادة جديدًا."
+          "انتهت جلسة التحقق الأمني. أدخل رمز المصادقة مرة أخرى."
         );
 
         return;
@@ -258,7 +498,6 @@ export default function ResetPasswordPage() {
           updateError
         );
 
-        // هسه ما نخفي السبب الحقيقي
         const text =
           updateError.message ||
           "Unknown error";
@@ -268,7 +507,9 @@ export default function ResetPasswordPage() {
 
         if (
           lower.includes("weak") ||
-          lower.includes("password strength")
+          lower.includes(
+            "password strength"
+          )
         ) {
           setError(
             "كلمة المرور غير قوية بما يكفي. اختر كلمة أقوى تحتوي أحرفًا وأرقامًا ورموزًا."
@@ -283,6 +524,14 @@ export default function ResetPasswordPage() {
         ) {
           setError(
             "اختر كلمة مرور مختلفة عن كلمة المرور السابقة."
+          );
+        } else if (
+          lower.includes("aal2")
+        ) {
+          setMfaVerified(false);
+
+          setError(
+            "يجب إعادة التحقق من رمز المصادقة."
           );
         } else {
           setError(
@@ -365,6 +614,73 @@ export default function ResetPasswordPage() {
         )}
 
         {ready &&
+          !mfaVerified &&
+          !message && (
+            <form
+              onSubmit={
+                handleVerifyMfa
+              }
+              className="mt-7 space-y-5"
+            >
+              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4 text-center">
+                <p className="font-bold text-orange-400">
+                  التحقق الأمني
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-gray-400">
+                  افتح تطبيق
+                  المصادقة وأدخل رمز
+                  NEXO المكوّن من 6
+                  أرقام.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm text-gray-300">
+                  رمز المصادقة
+                </label>
+
+                <input
+                  type="text"
+                  value={totpCode}
+                  onChange={(e) =>
+                    setTotpCode(
+                      e.target.value
+                        .replace(
+                          /\D/g,
+                          ""
+                        )
+                        .slice(
+                          0,
+                          6
+                        )
+                    )
+                  }
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  dir="ltr"
+                  placeholder="000000"
+                  className="w-full rounded-2xl border border-white/10 bg-black px-4 py-4 text-center text-2xl font-bold tracking-[0.4em] text-white outline-none focus:border-orange-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={
+                  verifyingMfa
+                }
+                className="w-full rounded-2xl bg-orange-500 px-5 py-3 font-bold text-black transition hover:bg-orange-400 disabled:opacity-50"
+              >
+                {verifyingMfa
+                  ? "جاري التحقق..."
+                  : "تحقق من الرمز"}
+              </button>
+            </form>
+          )}
+
+        {ready &&
+          mfaVerified &&
           !message && (
             <form
               onSubmit={
@@ -372,6 +688,11 @@ export default function ResetPasswordPage() {
               }
               className="mt-7 space-y-5"
             >
+              <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-4 text-center text-sm text-green-300">
+                ✓ تم التحقق من
+                المصادقة الثنائية
+              </div>
+
               <div>
                 <label className="mb-2 block text-sm text-gray-300">
                   كلمة المرور
@@ -383,8 +704,7 @@ export default function ResetPasswordPage() {
                   value={password}
                   onChange={(e) =>
                     setPassword(
-                      e.target
-                        .value
+                      e.target.value
                     )
                   }
                   autoComplete="new-password"
@@ -406,8 +726,7 @@ export default function ResetPasswordPage() {
                   }
                   onChange={(e) =>
                     setConfirmPassword(
-                      e.target
-                        .value
+                      e.target.value
                     )
                   }
                   autoComplete="new-password"
