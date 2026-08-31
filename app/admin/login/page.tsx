@@ -101,29 +101,35 @@ export default function AdminLoginPage() {
     );
 
     try {
-      const {
-        data,
-        error,
-      } =
-        await supabase.auth
-          .signInWithPassword({
-            email: cleanEmail,
-            password,
-          });
+   const {
+  data,
+  error,
+} =
+  await supabase.auth
+    .signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
 
-      if (
-        error ||
-        !data.user ||
-        !data.session
-      ) {
-        setPassword("");
+if (
+  error ||
+  !data.user ||
+  !data.session
+) {
+  console.error(
+    "Admin sign-in error:",
+    error
+  );
 
-        setStatus(
-          "الإيميل أو كلمة المرور غير صحيحة"
-        );
+  setPassword("");
 
-        return;
-      }
+  setStatus(
+    error?.message ||
+      "تعذر تسجيل الدخول"
+  );
+
+  return;
+}
 
       setStatus(
         "تم تسجيل الدخول بنجاح"
