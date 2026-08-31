@@ -1,5 +1,7 @@
 "use client";
 
+import Script from "next/script";
+
 import {
   FormEvent,
   useEffect,
@@ -9,11 +11,47 @@ import {
 
 import { createClient } from "@/lib/supabase/client";
 
+type TurnstileRenderOptions = {
+  sitekey: string;
+  theme?: "light" | "dark" | "auto";
+  size?: "normal" | "compact" | "flexible";
+  language?: string;
+  appearance?: "always" | "execute" | "interaction-only";
+  callback?: (token: string) => void;
+  "error-callback"?: (errorCode?: string) => void;
+  "expired-callback"?: () => void;
+  "timeout-callback"?: () => void;
+};
+
+type TurnstileApi = {
+  render: (
+    container: HTMLElement | string,
+    options: TurnstileRenderOptions
+  ) => string;
+
+  remove: (widgetId: string) => void;
+
+  reset: (widgetId?: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
 export default function AdminLoginPage() {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
 
+  const turnstileContainerRef =
+    useRef<HTMLDivElement | null>(null);
+
+  const turnstileWidgetIdRef =
+    useRef<string | null>(null);
+
   const [email, setEmail] = useState("");
+
   const [password, setPassword] =
     useState("");
 
@@ -27,6 +65,26 @@ export default function AdminLoginPage() {
     isCheckingSession,
     setIsCheckingSession,
   ] = useState(true);
+
+  const [
+    turnstileReady,
+    setTurnstileReady,
+  ] = useState(false);
+
+  const [
+    captchaToken,
+    setCaptchaToken,
+  ] = useState("");
+
+  const [
+    captchaError,
+    setCaptchaError,
+  ] = useState("");
+
+  const siteKey =
+    process.env
+      .NEXT_PUBLIC_TURNSTILE_SITE_KEY
+      ?.trim() ?? "";
 
   useEffect(() => {
     async function checkExistingSession() {
@@ -78,6 +136,127 @@ export default function AdminLoginPage() {
     void checkExistingSession();
   }, [supabase]);
 
+  useEffect(() => {
+    if (
+      !turnstileReady ||
+      !siteKey ||
+      !turnstileContainerRef.current ||
+      !window.turnstile
+    ) {
+      return;
+    }
+
+    if (
+      turnstileWidgetIdRef.current
+    ) {
+      try {
+        window.turnstile.remove(
+          turnstileWidgetIdRef.current
+        );
+      } catch {
+        // Ignore old widget cleanup errors.
+      }
+
+      turnstileWidgetIdRef.current =
+        null;
+    }
+
+    try {
+      const widgetId =
+        window.turnstile.render(
+          turnstileContainerRef.current,
+          {
+            sitekey: siteKey,
+            theme: "dark",
+            size: "flexible",
+            language: "ar",
+            appearance: "always",
+
+            callback: (token) => {
+              setCaptchaToken(
+                token.trim()
+              );
+
+              setCaptchaError("");
+            },
+
+            "error-callback": (
+              errorCode
+            ) => {
+              console.error(
+                "Admin Turnstile error:",
+                errorCode
+              );
+
+              setCaptchaToken("");
+
+              setCaptchaError(
+                "تعذر إكمال التحقق الأمني."
+              );
+            },
+
+            "expired-callback": () => {
+              setCaptchaToken("");
+
+              setCaptchaError(
+                "انتهت صلاحية التحقق الأمني. أعد التحقق."
+              );
+            },
+          }
+        );
+
+      turnstileWidgetIdRef.current =
+        widgetId;
+    } catch (error) {
+      console.error(
+        "Admin Turnstile render error:",
+        error
+      );
+
+      setCaptchaError(
+        "تعذر تشغيل التحقق الأمني."
+      );
+    }
+
+    return () => {
+      if (
+        turnstileWidgetIdRef.current &&
+        window.turnstile
+      ) {
+        try {
+          window.turnstile.remove(
+            turnstileWidgetIdRef.current
+          );
+        } catch {
+          // Ignore cleanup errors.
+        }
+      }
+
+      turnstileWidgetIdRef.current =
+        null;
+    };
+  }, [turnstileReady, siteKey]);
+
+  const resetCaptcha = () => {
+    setCaptchaToken("");
+
+    if (
+      window.turnstile &&
+      turnstileWidgetIdRef.current
+    ) {
+      try {
+        window.turnstile.reset(
+          turnstileWidgetIdRef.current
+        );
+      } catch (error) {
+        console.error(
+          "Turnstile reset error:",
+          error
+        );
+      }
+    }
+  };
+
   const handleLogin = async (
     event: FormEvent<HTMLFormElement>
   ) => {
@@ -94,6 +273,14 @@ export default function AdminLoginPage() {
       return;
     }
 
+    if (!captchaToken) {
+      setStatus(
+        "يرجى إكمال التحقق الأمني أولاً"
+      );
+
+      return;
+    }
+
     setIsLoading(true);
 
     setStatus(
@@ -101,35 +288,40 @@ export default function AdminLoginPage() {
     );
 
     try {
-   const {
-  data,
-  error,
-} =
-  await supabase.auth
-    .signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
+      const {
+        data,
+        error,
+      } =
+        await supabase.auth
+          .signInWithPassword({
+            email: cleanEmail,
+            password,
+            options: {
+              captchaToken,
+            },
+          });
 
-if (
-  error ||
-  !data.user ||
-  !data.session
-) {
-  console.error(
-    "Admin sign-in error:",
-    error
-  );
+      if (
+        error ||
+        !data.user ||
+        !data.session
+      ) {
+        console.error(
+          "Admin sign-in error:",
+          error
+        );
 
-  setPassword("");
+        setPassword("");
 
-  setStatus(
-    error?.message ||
-      "تعذر تسجيل الدخول"
-  );
+        setStatus(
+          error?.message ||
+            "تعذر تسجيل الدخول"
+        );
 
-  return;
-}
+        resetCaptcha();
+
+        return;
+      }
 
       setStatus(
         "تم تسجيل الدخول بنجاح"
@@ -172,6 +364,8 @@ if (
       setStatus(
         "حدث خطأ غير متوقع، حاول مرة أخرى"
       );
+
+      resetCaptcha();
     } finally {
       setIsLoading(false);
     }
@@ -193,6 +387,20 @@ if (
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#070707] px-5 py-10 text-white">
+      <Script
+        id="cloudflare-turnstile-admin"
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        strategy="afterInteractive"
+        onLoad={() =>
+          setTurnstileReady(true)
+        }
+        onError={() => {
+          setCaptchaError(
+            "تعذر تحميل خدمة التحقق الأمني."
+          );
+        }}
+      />
+
       <div className="pointer-events-none absolute left-1/2 top-[-170px] h-[340px] w-[340px] -translate-x-1/2 rounded-full bg-orange-500/15 blur-[110px]" />
 
       <section className="relative w-full max-w-[430px] overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.035] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.55)] backdrop-blur-xl sm:p-8">
@@ -269,6 +477,27 @@ if (
               disabled={isLoading}
               className="h-14 w-full rounded-2xl border border-white/10 bg-black/35 px-4 text-left text-sm text-white outline-none transition placeholder:text-white/25 focus:border-orange-500/60 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             />
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+            {!siteKey ? (
+              <p className="text-center text-sm text-red-300">
+                إعداد Turnstile غير مكتمل
+              </p>
+            ) : (
+              <div
+                ref={
+                  turnstileContainerRef
+                }
+                className="flex min-h-[70px] w-full items-center justify-center"
+              />
+            )}
+
+            {captchaError ? (
+              <p className="mt-2 text-center text-xs text-orange-300">
+                {captchaError}
+              </p>
+            ) : null}
           </div>
 
           {status && (
