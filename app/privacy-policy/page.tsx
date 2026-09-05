@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     "سياسة الخصوصية الخاصة بتطبيق وخدمة NEXO Digital Pass.",
 };
 
-const supportEmail = "alheetyabdollah@gmail.com";
+const supportEmail = "nexodigitalpass.support@gmail.com";
 
 export default function PrivacyPolicyPage() {
   return (

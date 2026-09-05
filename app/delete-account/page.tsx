@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     "صفحة طلب حذف حساب NEXO Digital Pass أو حذف جزء من البيانات المرتبطة به.",
 };
 
-const supportEmail = "alheetyabdollah@gmail.com";
+const supportEmail = "nexodigitalpass.support@gmail.com";
 
 const deleteAllSubject = encodeURIComponent(
   "NEXO Digital Pass - Delete Account Request"
