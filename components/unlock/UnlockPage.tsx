@@ -4,21 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
-import { ensureAnonymousSession } from "@/lib/auth-session";
 import { CRYPTO_VERSION } from "@/lib/crypto/aes";
-
 import {
   deriveWrappingKey,
   KDF_ALGORITHM,
 } from "@/lib/crypto/kdf";
-
 import { decryptVaultKey } from "@/lib/crypto/vault";
-
 import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 
 type UnlockPageProps = {
   cardCode: string | null;
-  migrationSecret: string | null;
 };
 
 type UnlockCard = {
@@ -30,37 +25,23 @@ type UnlockCard = {
   password_iterations: number | null;
 };
 
-type MigrationClaimResult = {
-  ok: boolean;
-  card_code?: string;
-  owner_id?: string;
-  claimed_at?: string;
-};
-
 export default function UnlockPage({
   cardCode,
-  migrationSecret,
 }: UnlockPageProps) {
   const router = useRouter();
   const { openSession } = useVaultSession();
 
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
-
   const [isLoading, setIsLoading] =
     useState(false);
-
   const [showPassword, setShowPassword] =
     useState(false);
 
   const unlockVault = async () => {
     if (isLoading) return;
 
-    const cleanedCardCode =
-      cardCode?.trim().toUpperCase();
-
-    const cleanMigrationSecret =
-      migrationSecret?.trim() ?? "";
+    const cleanedCardCode = cardCode?.trim();
 
     if (!cleanedCardCode) {
       setStatus("البطاقة غير موجودة");
@@ -76,74 +57,28 @@ export default function UnlockPage({
     setStatus("جاري التحقق...");
 
     try {
-      let rawCard: unknown = null;
+      const {
+        data: rawCard,
+        error,
+      } = await supabase.rpc(
+        "nexo_get_web_unlock_card",
+        {
+          p_card_code: cleanedCardCode,
+        }
+      );
 
-      /*
-       * إذا الرابط يحتوي Migration Secret:
-       * ننشئ/نسترجع جلسة Supabase أولًا.
-       */
-      if (cleanMigrationSecret) {
-        await ensureAnonymousSession();
-
-        const {
-          data,
-          error,
-        } = await supabase.rpc(
-          "nexo_get_migration_unlock_card",
-          {
-            p_card_code: cleanedCardCode,
-            p_migration_secret:
-              cleanMigrationSecret,
-          }
+      if (error) {
+        console.error(error);
+        setStatus(
+          "حدث خطأ أثناء التحقق من البطاقة"
         );
-
-        if (error) {
-          throw error;
-        }
-
-        rawCard = data;
-
-        if (!rawCard) {
-          setStatus(
-            "رابط ترحيل البطاقة غير صالح أو تم استخدامه سابقًا"
-          );
-          return;
-        }
-      } else {
-        /*
-         * البطاقات الطبيعية تستمر بنفس
-         * طريقة فتح الموقع الحالية.
-         */
-        const {
-          data,
-          error,
-        } = await supabase.rpc(
-          "nexo_get_web_unlock_card",
-          {
-            p_card_code: cleanedCardCode,
-          }
-        );
-
-        if (error) {
-          console.error(error);
-
-          setStatus(
-            "حدث خطأ أثناء التحقق من البطاقة"
-          );
-
-          return;
-        }
-
-        rawCard = data;
+        return;
       }
 
-      const data =
-        rawCard as UnlockCard | null;
+      const data = rawCard as UnlockCard | null;
 
       if (!data) {
-        setStatus(
-          "تعذر العثور على البطاقة"
-        );
+        setStatus("تعذر العثور على البطاقة");
         return;
       }
 
@@ -172,8 +107,7 @@ export default function UnlockPage({
       }
 
       if (
-        data.kdf_algorithm !==
-        KDF_ALGORITHM
+        data.kdf_algorithm !== KDF_ALGORITHM
       ) {
         setStatus(
           "خوارزمية حماية البطاقة غير مدعومة"
@@ -210,53 +144,10 @@ export default function UnlockPage({
           );
       } catch (error) {
         console.error(error);
-
         setStatus(
           "كلمة المرور غير صحيحة"
         );
-
         return;
-      }
-
-      /*
-       * مهم جدًا:
-       * ما نربط البطاقة بالمستخدم إلا
-       * بعد نجاح كلمة مرور الخزنة.
-       */
-      if (cleanMigrationSecret) {
-        setStatus(
-          "جاري ربط البطاقة بأمان..."
-        );
-
-        const {
-          data: claimData,
-          error: claimError,
-        } = await supabase.rpc(
-          "nexo_claim_migrated_card",
-          {
-            p_card_code:
-              cleanedCardCode,
-            p_migration_secret:
-              cleanMigrationSecret,
-          }
-        );
-
-        if (claimError) {
-          throw claimError;
-        }
-
-        const claimResult =
-          claimData as
-            | MigrationClaimResult
-            | null;
-
-        if (!claimResult?.ok) {
-          setStatus(
-            "تعذر ربط البطاقة. أعد فتح رابط الترحيل."
-          );
-
-          return;
-        }
       }
 
       await openSession({
@@ -266,6 +157,8 @@ export default function UnlockPage({
 
       /*
        * تنظيف آثار النظام القديم.
+       * لا يتم تخزين كلمة المرور أو Vault Key
+       * داخل LocalStorage أو SessionStorage.
        */
       localStorage.removeItem(
         `nexo_unlocked_${cleanedCardCode}`
@@ -279,6 +172,10 @@ export default function UnlockPage({
         `nexo_vault_password_${cleanedCardCode}`
       );
 
+      /*
+       * رقم البطاقة ليس سرًا، ويستخدم فقط
+       * لمعرفة صفحة Unlock عند القفل التلقائي.
+       */
       sessionStorage.setItem(
         "nexo_last_card",
         cleanedCardCode
@@ -287,30 +184,21 @@ export default function UnlockPage({
       setPassword("");
       setStatus("");
 
-      /*
-       * بعد نجاح Migration نشيل الرمز
-       * من الرابط حتى لا يبقى ظاهرًا.
-       */
       router.replace(
         `/vault?card=${encodeURIComponent(
           cleanedCardCode
         )}`
       );
     } catch (error) {
-      console.error(
-        "NEXO unlock error:",
-        error
-      );
-
+      console.error(error);
       setStatus(
-        error instanceof Error
-          ? error.message
-          : "حدث خطأ أثناء فتح الخزنة"
+        "حدث خطأ أثناء فتح الخزنة"
       );
     } finally {
       setIsLoading(false);
     }
   };
+
   const isChecking =
     status === "جاري التحقق...";
 
