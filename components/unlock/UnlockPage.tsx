@@ -11,6 +11,7 @@ import {
 } from "@/lib/crypto/kdf";
 import { decryptVaultKey } from "@/lib/crypto/vault";
 import { useVaultSession } from "@/components/providers/VaultSessionProvider";
+import MigrationTurnstile from "@/components/security/MigrationTurnstile";
 
 type UnlockPageProps = {
   cardCode: string | null;
@@ -39,6 +40,12 @@ export default function UnlockPage({
     useState(false);
   const [showPassword, setShowPassword] =
     useState(false);
+
+  const [captchaToken, setCaptchaToken] =
+    useState("");
+
+  const [captchaError, setCaptchaError] =
+    useState("");
 
   const unlockVault = async () => {
     if (isLoading) return;
@@ -449,6 +456,25 @@ export default function UnlockPage({
                     }`}
                   >
                     {status}
+                  </div>
+                )}
+
+                {_migrationSecret && (
+                  <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="mb-3 text-center text-xs font-bold text-white/45">
+                      تحقق أمني لتحديث حماية البطاقة
+                    </p>
+
+                    <MigrationTurnstile
+                      onToken={setCaptchaToken}
+                      onError={setCaptchaError}
+                    />
+
+                    {captchaError && (
+                      <p className="mt-3 text-center text-xs font-bold text-red-300">
+                        {captchaError}
+                      </p>
+                    )}
                   </div>
                 )}
 
