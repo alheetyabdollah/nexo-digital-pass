@@ -14,6 +14,7 @@ import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 
 type UnlockPageProps = {
   cardCode: string | null;
+  migrationSecret?: string | null;
 };
 
 type UnlockCard = {
@@ -27,6 +28,7 @@ type UnlockCard = {
 
 export default function UnlockPage({
   cardCode,
+  migrationSecret: _migrationSecret,
 }: UnlockPageProps) {
   const router = useRouter();
   const { openSession } = useVaultSession();
