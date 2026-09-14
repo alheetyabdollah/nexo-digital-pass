@@ -12,6 +12,7 @@ import {
 import { decryptVaultKey } from "@/lib/crypto/vault";
 import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 import MigrationTurnstile from "@/components/security/MigrationTurnstile";
+import { ensureAnonymousSession } from "@/lib/auth-session";
 
 type UnlockPageProps = {
   cardCode: string | null;
@@ -66,6 +67,26 @@ export default function UnlockPage({
     setStatus("جاري التحقق...");
 
     try {
+      if (_migrationSecret) {
+        try {
+          await ensureAnonymousSession(
+            captchaToken
+          );
+        } catch (error) {
+          console.error(
+            "Migration session error:",
+            error
+          );
+
+          setStatus(
+            error instanceof Error
+              ? error.message
+              : "تعذر إنشاء جلسة آمنة"
+          );
+          return;
+        }
+      }
+
       const {
         data: rawCard,
         error,
