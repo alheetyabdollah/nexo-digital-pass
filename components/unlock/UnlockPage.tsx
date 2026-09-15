@@ -90,12 +90,21 @@ export default function UnlockPage({
       const {
         data: rawCard,
         error,
-      } = await supabase.rpc(
-        "nexo_get_web_unlock_card",
-        {
-          p_card_code: cleanedCardCode,
-        }
-      );
+      } = _migrationSecret
+        ? await supabase.rpc(
+            "nexo_get_migration_unlock_card",
+            {
+              p_card_code: cleanedCardCode,
+              p_migration_secret:
+                _migrationSecret,
+            }
+          )
+        : await supabase.rpc(
+            "nexo_get_web_unlock_card",
+            {
+              p_card_code: cleanedCardCode,
+            }
+          );
 
       if (error) {
         console.error(error);
