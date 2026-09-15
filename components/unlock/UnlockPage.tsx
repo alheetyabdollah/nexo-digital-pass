@@ -57,6 +57,12 @@ export default function UnlockPage({
   const [captchaError, setCaptchaError] =
     useState("");
 
+  const requiresSecurityCheck =
+    Boolean(
+      _migrationSecret ||
+      _transferProof
+    );
+
   const unlockVault = async () => {
     if (isLoading) return;
 
@@ -76,7 +82,7 @@ export default function UnlockPage({
     setStatus("جاري التحقق...");
 
     try {
-      if (_migrationSecret) {
+      if (requiresSecurityCheck) {
         try {
           await ensureAnonymousSession(
             captchaToken
@@ -549,7 +555,7 @@ export default function UnlockPage({
                   </div>
                 )}
 
-                {_migrationSecret && (
+                {requiresSecurityCheck && (
                   <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="mb-3 text-center text-xs font-bold text-white/45">
                       تحقق أمني لتحديث حماية البطاقة
