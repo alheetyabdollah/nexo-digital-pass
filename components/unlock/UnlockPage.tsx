@@ -114,12 +114,19 @@ export default function UnlockPage({
                 _migrationSecret,
             }
           )
-        : await supabase.rpc(
-            "nexo_get_web_unlock_card",
-            {
-              p_card_code: cleanedCardCode,
-            }
-          );
+        : _transferProof
+          ? await supabase.rpc(
+              "nexo_get_transfer_unlock_card",
+              {
+                p_card_code: cleanedCardCode,
+              }
+            )
+          : await supabase.rpc(
+              "nexo_get_web_unlock_card",
+              {
+                p_card_code: cleanedCardCode,
+              }
+            );
 
       if (error) {
         console.error(error);
