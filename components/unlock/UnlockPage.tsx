@@ -249,7 +249,50 @@ export default function UnlockPage({
         }
       }
 
-      if (_migrationSecret) {
+      if (_transferProof && !_migrationSecret) {
+        const {
+          data: transferData,
+          error: transferError,
+        } = await supabase.rpc(
+          "nexo_transfer_web_card_owner_once",
+          {
+            p_card_code: cleanedCardCode,
+            p_transfer_proof: _transferProof,
+          }
+        );
+
+        if (transferError) {
+          console.error(
+            "Web transfer error:",
+            transferError
+          );
+
+          setStatus(
+            "تعذر نقل البطاقة إلى هذا الجهاز"
+          );
+          return;
+        }
+
+        const transferResult =
+          transferData as
+            | {
+                ok: boolean;
+                transferred?: boolean;
+                card_code?: string;
+                owner_id?: string;
+                claimed_at?: string;
+              }
+            | null;
+
+        if (!transferResult?.ok) {
+          setStatus(
+            "رابط نقل البطاقة غير صالح أو تم استخدامه سابقًا"
+          );
+          return;
+        }
+      }
+
+      if (_migrationSecret || _transferProof) {
         const cleanUnlockUrl =
           `/unlock?card=${encodeURIComponent(
             cleanedCardCode
