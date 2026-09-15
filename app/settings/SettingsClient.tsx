@@ -180,25 +180,17 @@ export default function SettingsClient({
 
     try {
       const {
-        data,
+        data: rawData,
         error,
-      } = await supabase
-        .from("cards")
-        .select(
-          [
-            "status",
-            "crypto_version",
-            "kdf_algorithm",
-            "encrypted_vault_key",
-            "password_salt",
-            "password_iterations",
-          ].join(",")
-        )
-        .eq(
-          "card_code",
-          cleanedCardCode
-        )
-        .maybeSingle<CardSecurityData>();
+      } = await supabase.rpc(
+        "nexo_get_owned_card_security",
+        {
+          p_card_code: cleanedCardCode,
+        }
+      );
+
+      const data =
+        rawData as CardSecurityData | null;
 
       if (error) {
         console.error(error);
@@ -295,38 +287,26 @@ export default function SettingsClient({
         );
 
       const {
-        data: updatedCard,
+        data: rawUpdateResult,
         error: updateError,
-      } = await supabase
-        .from("cards")
-        .update({
-          encrypted_vault_key:
+      } = await supabase.rpc(
+        "nexo_update_owned_card_password",
+        {
+          p_card_code: cleanedCardCode,
+          p_encrypted_vault_key:
             newEncryptedVaultKey,
-
-          password_salt:
+          p_password_salt:
             newPasswordSalt,
+        }
+      );
 
-          password_iterations:
-            NEW_PASSWORD_ITERATIONS,
-
-          kdf_algorithm:
-            KDF_ALGORITHM,
-
-          crypto_version:
-            CRYPTO_VERSION,
-
-          card_password_hash: null,
-        })
-        .eq(
-          "card_code",
-          cleanedCardCode
-        )
-        .eq(
-          "status",
-          "Activated"
-        )
-        .select("id")
-        .maybeSingle();
+      const updatedCard =
+        rawUpdateResult as
+          | {
+              ok: boolean;
+              id?: string;
+            }
+          | null;
 
       if (updateError) {
         console.error(updateError);
@@ -337,7 +317,7 @@ export default function SettingsClient({
         return;
       }
 
-      if (!updatedCard) {
+      if (!updatedCard?.ok) {
         setStatus(
           "لم يتم تحديث بيانات البطاقة"
         );

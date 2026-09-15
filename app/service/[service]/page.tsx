@@ -120,11 +120,25 @@ if (
   return;
 }
 
-      const { data: card } = await supabase
-        .from("cards")
-        .select("id")
-        .eq("card_code", cardCode)
-        .single();
+      const {
+        data: rawCard,
+        error: cardError,
+      } = await supabase.rpc(
+        "nexo_get_owned_card",
+        {
+          p_card_code: cleanedCardCode,
+        }
+      );
+
+      if (cardError) {
+        console.error(cardError);
+        setLoading(false);
+        return;
+      }
+
+      const card = rawCard as {
+        id: string;
+      } | null;
 
       if (!card) {
         setLoading(false);

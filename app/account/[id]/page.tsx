@@ -146,25 +146,27 @@ export default function AccountDetailsPage() {
     }
 
     try {
-      const {
-        data: card,
-        error: cardError,
-      } = await supabase
-        .from("cards")
-        .select("id, status, crypto_version")
-        .eq(
-          "card_code",
-          cleanedCardCode
-        )
-        .maybeSingle();
+        const {
+          data: rawCard,
+          error: cardError,
+        } = await supabase.rpc(
+          "nexo_get_owned_card",
+          {
+            p_card_code: cleanedCardCode,
+          }
+        );
+
+        const card = rawCard as {
+          id: string;
+          status: string | null;
+        } | null;
 
       if (cancelled) return;
 
       if (
         cardError ||
         !card ||
-        card.status !== "Activated" ||
-        card.crypto_version !== 2
+        card.status !== "Activated"
       ) {
         router.replace(
           `/card/${encodeURIComponent(

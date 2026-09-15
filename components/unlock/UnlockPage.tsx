@@ -11,9 +11,13 @@ import {
 } from "@/lib/crypto/kdf";
 import { decryptVaultKey } from "@/lib/crypto/vault";
 import { useVaultSession } from "@/components/providers/VaultSessionProvider";
+import MigrationTurnstile from "@/components/security/MigrationTurnstile";
+import { ensureAnonymousSession } from "@/lib/auth-session";
 
 type UnlockPageProps = {
   cardCode: string | null;
+  migrationSecret?: string | null;
+  transferProof?: string | null;
 };
 
 type UnlockCard = {
@@ -25,8 +29,17 @@ type UnlockCard = {
   password_iterations: number | null;
 };
 
+type MigrationClaimResult = {
+  ok: boolean;
+  card_code?: string;
+  owner_id?: string;
+  claimed_at?: string;
+};
+
 export default function UnlockPage({
   cardCode,
+  migrationSecret: _migrationSecret,
+  transferProof: _transferProof,
 }: UnlockPageProps) {
   const router = useRouter();
   const { openSession } = useVaultSession();
@@ -37,6 +50,18 @@ export default function UnlockPage({
     useState(false);
   const [showPassword, setShowPassword] =
     useState(false);
+
+  const [captchaToken, setCaptchaToken] =
+    useState("");
+
+  const [captchaError, setCaptchaError] =
+    useState("");
+
+  const requiresSecurityCheck =
+    Boolean(
+      _migrationSecret ||
+      _transferProof
+    );
 
   const unlockVault = async () => {
     if (isLoading) return;
@@ -57,15 +82,51 @@ export default function UnlockPage({
     setStatus("جاري التحقق...");
 
     try {
+      if (requiresSecurityCheck) {
+        try {
+          await ensureAnonymousSession(
+            captchaToken
+          );
+        } catch (error) {
+          console.error(
+            "Migration session error:",
+            error
+          );
+
+          setStatus(
+            error instanceof Error
+              ? error.message
+              : "تعذر إنشاء جلسة آمنة"
+          );
+          return;
+        }
+      }
+
       const {
         data: rawCard,
         error,
-      } = await supabase.rpc(
-        "nexo_get_web_unlock_card",
-        {
-          p_card_code: cleanedCardCode,
-        }
-      );
+      } = _migrationSecret
+        ? await supabase.rpc(
+            "nexo_get_migration_unlock_card",
+            {
+              p_card_code: cleanedCardCode,
+              p_migration_secret:
+                _migrationSecret,
+            }
+          )
+        : _transferProof
+          ? await supabase.rpc(
+              "nexo_get_transfer_unlock_card",
+              {
+                p_card_code: cleanedCardCode,
+              }
+            )
+          : await supabase.rpc(
+              "nexo_get_web_unlock_card",
+              {
+                p_card_code: cleanedCardCode,
+              }
+            );
 
       if (error) {
         console.error(error);
@@ -148,6 +209,100 @@ export default function UnlockPage({
           "كلمة المرور غير صحيحة"
         );
         return;
+      }
+
+      if (_migrationSecret) {
+        const {
+          data: claimData,
+          error: claimError,
+        } = await supabase.rpc(
+          "nexo_claim_migrated_card",
+          {
+            p_card_code: cleanedCardCode,
+            p_migration_secret:
+              _migrationSecret,
+          }
+        );
+
+        if (claimError) {
+          console.error(
+            "Migration claim error:",
+            claimError
+          );
+
+          setStatus(
+            "تعذر إكمال تحديث حماية البطاقة"
+          );
+          return;
+        }
+
+        const claimResult =
+          claimData as
+            | MigrationClaimResult
+            | null;
+
+        if (!claimResult?.ok) {
+          setStatus(
+            "رابط تحديث البطاقة غير صالح أو تم استخدامه سابقًا"
+          );
+          return;
+        }
+      }
+
+      if (_transferProof && !_migrationSecret) {
+        const {
+          data: transferData,
+          error: transferError,
+        } = await supabase.rpc(
+          "nexo_transfer_web_card_owner_once",
+          {
+            p_card_code: cleanedCardCode,
+            p_transfer_proof: _transferProof,
+          }
+        );
+
+        if (transferError) {
+          console.error(
+            "Web transfer error:",
+            transferError
+          );
+
+          setStatus(
+            "تعذر نقل البطاقة إلى هذا الجهاز"
+          );
+          return;
+        }
+
+        const transferResult =
+          transferData as
+            | {
+                ok: boolean;
+                transferred?: boolean;
+                card_code?: string;
+                owner_id?: string;
+                claimed_at?: string;
+              }
+            | null;
+
+        if (!transferResult?.ok) {
+          setStatus(
+            "رابط نقل البطاقة غير صالح أو تم استخدامه سابقًا"
+          );
+          return;
+        }
+      }
+
+      if (_migrationSecret || _transferProof) {
+        const cleanUnlockUrl =
+          `/unlock?card=${encodeURIComponent(
+            cleanedCardCode
+          )}`;
+
+        window.history.replaceState(
+          window.history.state,
+          "",
+          cleanUnlockUrl
+        );
       }
 
       await openSession({
@@ -447,6 +602,25 @@ export default function UnlockPage({
                     }`}
                   >
                     {status}
+                  </div>
+                )}
+
+                {requiresSecurityCheck && (
+                  <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="mb-3 text-center text-xs font-bold text-white/45">
+                      تحقق أمني لتحديث حماية البطاقة
+                    </p>
+
+                    <MigrationTurnstile
+                      onToken={setCaptchaToken}
+                      onError={setCaptchaError}
+                    />
+
+                    {captchaError && (
+                      <p className="mt-3 text-center text-xs font-bold text-red-300">
+                        {captchaError}
+                      </p>
+                    )}
                   </div>
                 )}
 
