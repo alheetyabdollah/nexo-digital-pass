@@ -234,6 +234,19 @@ export default function UnlockPage({
         }
       }
 
+      if (_migrationSecret) {
+        const cleanUnlockUrl =
+          `/unlock?card=${encodeURIComponent(
+            cleanedCardCode
+          )}`;
+
+        window.history.replaceState(
+          window.history.state,
+          "",
+          cleanUnlockUrl
+        );
+      }
+
       await openSession({
         cardCode: cleanedCardCode,
         vaultKeyBytes,
