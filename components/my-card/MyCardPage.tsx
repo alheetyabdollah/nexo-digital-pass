@@ -27,6 +27,23 @@ type CardData = {
   activated_at?: string | null;
   updated_at?: string | null;
 };
+type TransferEnrollResult = {
+  ok: boolean;
+  enrolled?: boolean;
+  card_code?: string;
+};
+
+function generateTransferProof(): string {
+  const bytes = new Uint8Array(32);
+
+  crypto.getRandomValues(bytes);
+
+  return Array.from(
+    bytes,
+    (byte) =>
+      byte.toString(16).padStart(2, "0")
+  ).join("");
+}
 
 function formatDate(value?: string | null) {
   if (!value) {
@@ -66,6 +83,47 @@ export default function MyCardPage() {
   const [statusMessage, setStatusMessage] =
     useState("");
 
+
+  const prepareTransferProof =
+    async (): Promise<string> => {
+      if (!card) {
+        throw new Error(
+          "Card is not loaded"
+        );
+      }
+
+      const transferProof =
+        generateTransferProof();
+
+      const {
+        data,
+        error,
+      } = await supabase.rpc(
+        "nexo_enroll_transfer_proof",
+        {
+          p_card_code: card.card_code,
+          p_transfer_proof:
+            transferProof,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      const result =
+        data as
+          | TransferEnrollResult
+          | null;
+
+      if (!result?.ok) {
+        throw new Error(
+          "Unable to prepare card transfer"
+        );
+      }
+
+      return transferProof;
+    };
 
   useEffect(() => {
     let cancelled = false;
