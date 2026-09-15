@@ -17,6 +17,7 @@ import { ensureAnonymousSession } from "@/lib/auth-session";
 type UnlockPageProps = {
   cardCode: string | null;
   migrationSecret?: string | null;
+  transferProof?: string | null;
 };
 
 type UnlockCard = {
@@ -38,6 +39,7 @@ type MigrationClaimResult = {
 export default function UnlockPage({
   cardCode,
   migrationSecret: _migrationSecret,
+  transferProof: _transferProof,
 }: UnlockPageProps) {
   const router = useRouter();
   const { openSession } = useVaultSession();
