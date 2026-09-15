@@ -82,6 +82,14 @@ export default function MyCardPage() {
 
   const [statusMessage, setStatusMessage] =
     useState("");
+  const [transferLink, setTransferLink] =
+    useState("");
+
+  const [transferBusy, setTransferBusy] =
+    useState(false);
+
+  const [transferMessage, setTransferMessage] =
+    useState("");
 
 
   const prepareTransferProof =
@@ -124,6 +132,156 @@ export default function MyCardPage() {
 
       return transferProof;
     };
+
+  async function createTransferLink() {
+    if (!card || transferBusy) {
+      return;
+    }
+
+    setTransferBusy(true);
+    setTransferMessage("");
+
+    try {
+      /*
+       * نلغي أي رابط نقل سابق أولاً.
+       * هذا يجعل إنشاء رابط جديد آمناً حتى لو
+       * ضاع الرابط السابق أو تم تحديث الصفحة.
+       */
+      const {
+        data: cancelData,
+        error: cancelError,
+      } = await supabase.rpc(
+        "nexo_cancel_web_card_transfer",
+        {
+          p_card_code: card.card_code,
+        }
+      );
+
+      if (cancelError) {
+        throw cancelError;
+      }
+
+      const cancelResult =
+        cancelData as
+          | { ok: boolean }
+          | null;
+
+      if (!cancelResult?.ok) {
+        throw new Error(
+          "Unable to reset previous transfer"
+        );
+      }
+
+      const transferProof =
+        await prepareTransferProof();
+
+      const link =
+        `${window.location.origin}` +
+        `/unlock?card=${encodeURIComponent(
+          card.card_code
+        )}` +
+        `&t=${encodeURIComponent(
+          transferProof
+        )}`;
+
+      setTransferLink(link);
+
+      setTransferMessage(
+        "تم إنشاء رابط نقل آمن. افتحه على الجهاز الجديد ثم أدخل كلمة مرور الخزنة."
+      );
+    } catch (error) {
+      console.error(
+        "Create transfer link error:",
+        error
+      );
+
+      setTransferLink("");
+
+      setTransferMessage(
+        "تعذر إنشاء رابط نقل البطاقة."
+      );
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
+  async function copyTransferLink() {
+    if (!transferLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(
+        transferLink
+      );
+
+      setTransferMessage(
+        "تم نسخ رابط النقل."
+      );
+    } catch (error) {
+      console.error(
+        "Copy transfer link error:",
+        error
+      );
+
+      setTransferMessage(
+        "تعذر النسخ تلقائياً. يمكنك تحديد الرابط ونسخه يدوياً."
+      );
+    }
+  }
+
+  async function cancelTransferLink() {
+    if (!card || transferBusy) {
+      return;
+    }
+
+    setTransferBusy(true);
+    setTransferMessage("");
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase.rpc(
+        "nexo_cancel_web_card_transfer",
+        {
+          p_card_code: card.card_code,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      const result =
+        data as
+          | { ok: boolean }
+          | null;
+
+      if (!result?.ok) {
+        throw new Error(
+          "Unable to cancel card transfer"
+        );
+      }
+
+      setTransferLink("");
+
+      setTransferMessage(
+        "تم إلغاء رابط النقل."
+      );
+    } catch (error) {
+      console.error(
+        "Cancel transfer link error:",
+        error
+      );
+
+      setTransferMessage(
+        "تعذر إلغاء رابط النقل."
+      );
+    } finally {
+      setTransferBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -442,6 +600,92 @@ export default function MyCardPage() {
 
 
         {/* حالة الحماية */}
+        <section className="mt-4 rounded-[26px] border border-white/10 bg-white/[0.035] p-5">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-orange-500/20 bg-orange-500/10 text-orange-400">
+              <HiOutlineShieldCheck size={27} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-black text-white">
+                نقل البطاقة إلى جهاز جديد
+              </h3>
+
+              <p className="mt-2 text-xs leading-6 text-white/45">
+                أنشئ رابط نقل خاص وافتحه على الجهاز الجديد.
+                لن يتم نقل ملكية البطاقة إلا بعد إدخال كلمة مرور الخزنة الصحيحة.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              void createTransferLink();
+            }}
+            disabled={transferBusy}
+            className="mt-5 flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3.5 text-sm font-black text-black transition hover:bg-orange-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {transferBusy
+              ? "جاري تجهيز الرابط..."
+              : transferLink
+                ? "إنشاء رابط نقل جديد"
+                : "إنشاء رابط النقل"}
+          </button>
+
+          {transferLink && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+              <p className="mb-2 text-xs font-bold text-white/55">
+                رابط النقل الخاص
+              </p>
+
+              <textarea
+                readOnly
+                dir="ltr"
+                value={transferLink}
+                onFocus={(event) => {
+                  event.currentTarget.select();
+                }}
+                className="h-24 w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 text-left text-[11px] leading-5 text-white/70 outline-none"
+              />
+
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTransferLink();
+                  }}
+                  disabled={transferBusy}
+                  className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-3 text-xs font-black text-orange-300 transition active:scale-95 disabled:opacity-50"
+                >
+                  نسخ الرابط
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void cancelTransferLink();
+                  }}
+                  disabled={transferBusy}
+                  className="rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3 py-3 text-xs font-black text-red-300 transition active:scale-95 disabled:opacity-50"
+                >
+                  إلغاء الرابط
+                </button>
+              </div>
+
+              <p className="mt-3 text-[11px] leading-5 text-yellow-200/60">
+                لا تشارك هذا الرابط إلا مع الجهاز الذي تريد نقل البطاقة إليه.
+              </p>
+            </div>
+          )}
+
+          {transferMessage && (
+            <p className="mt-4 text-xs leading-6 text-white/55">
+              {transferMessage}
+            </p>
+          )}
+        </section>
+
         <section className="mt-4 rounded-[26px] border border-orange-500/20 bg-gradient-to-br from-orange-500/[0.09] to-white/[0.025] p-5">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-orange-500/20 bg-orange-500/10 text-orange-400">
