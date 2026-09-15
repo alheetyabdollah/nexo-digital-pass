@@ -28,6 +28,13 @@ type UnlockCard = {
   password_iterations: number | null;
 };
 
+type MigrationClaimResult = {
+  ok: boolean;
+  card_code?: string;
+  owner_id?: string;
+  claimed_at?: string;
+};
+
 export default function UnlockPage({
   cardCode,
   migrationSecret: _migrationSecret,
@@ -187,6 +194,44 @@ export default function UnlockPage({
           "كلمة المرور غير صحيحة"
         );
         return;
+      }
+
+      if (_migrationSecret) {
+        const {
+          data: claimData,
+          error: claimError,
+        } = await supabase.rpc(
+          "nexo_claim_migrated_card",
+          {
+            p_card_code: cleanedCardCode,
+            p_migration_secret:
+              _migrationSecret,
+          }
+        );
+
+        if (claimError) {
+          console.error(
+            "Migration claim error:",
+            claimError
+          );
+
+          setStatus(
+            "تعذر إكمال تحديث حماية البطاقة"
+          );
+          return;
+        }
+
+        const claimResult =
+          claimData as
+            | MigrationClaimResult
+            | null;
+
+        if (!claimResult?.ok) {
+          setStatus(
+            "رابط تحديث البطاقة غير صالح أو تم استخدامه سابقًا"
+          );
+          return;
+        }
       }
 
       await openSession({
