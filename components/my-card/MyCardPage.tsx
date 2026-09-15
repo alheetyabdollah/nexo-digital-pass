@@ -94,14 +94,12 @@ export default function MyCardPage() {
 
       try {
         const { data, error } =
-          await supabase
-            .from("cards")
-            .select("*")
-            .eq(
-              "card_code",
-              cleanedCardCode
-            )
-            .maybeSingle();
+          await supabase.rpc(
+            "nexo_get_my_card_summary",
+            {
+              p_card_code: cleanedCardCode,
+            }
+          );
 
         if (cancelled) {
           return;
