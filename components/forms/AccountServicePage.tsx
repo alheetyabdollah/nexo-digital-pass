@@ -143,16 +143,19 @@ export default function AccountServicePage({
 
     try {
       const {
-        data: card,
+        data: rawCard,
         error: cardError,
-      } = await supabase
-        .from("cards")
-        .select("id, status, crypto_version")
-        .eq(
-          "card_code",
-          cleanedCardCode
-        )
-        .maybeSingle();
+      } = await supabase.rpc(
+        "nexo_get_owned_card",
+        {
+          p_card_code: cleanedCardCode,
+        }
+      );
+
+      const card = rawCard as {
+        id: string;
+        status: string | null;
+      } | null;
 
       if (cardError) {
         console.error(cardError);
@@ -170,13 +173,6 @@ export default function AccountServicePage({
       if (card.status !== "Activated") {
         setStatus(
           "هذه البطاقة غير مفعلة"
-        );
-        return;
-      }
-
-      if (card.crypto_version !== 2) {
-        setStatus(
-          "إصدار تشفير البطاقة غير مدعوم"
         );
         return;
       }
