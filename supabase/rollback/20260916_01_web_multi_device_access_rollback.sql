@@ -106,6 +106,13 @@ on function public.nexo_get_my_card_summary(text)
 to authenticated;
 
 
+drop trigger if exists
+  nexo_reset_web_access_on_owner_change
+on public.cards;
+
+drop function if exists
+  public.nexo_reset_web_access_on_owner_change();
+
 drop function if exists
   public.nexo_authorize_web_device(text, text);
 

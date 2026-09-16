@@ -35,6 +35,48 @@ create table if not exists public.card_web_access (
 
 alter table public.card_web_access
   enable row level security;
+-- ------------------------------------------------------------
+-- Ownership changes revoke all previously trusted web devices.
+--
+-- This keeps transfer semantics strict:
+-- when owner_id changes, old browsers/devices immediately lose
+-- trusted access and the new owner establishes a fresh verifier.
+-- ------------------------------------------------------------
+
+create or replace function public.nexo_reset_web_access_on_owner_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.owner_id is distinct from new.owner_id then
+    delete from public.card_web_access
+    where card_id = new.id;
+
+    new.web_access_secret_hash := null;
+    new.web_access_secret_version := null;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists
+  nexo_reset_web_access_on_owner_change
+on public.cards;
+
+create trigger
+  nexo_reset_web_access_on_owner_change
+before update of owner_id
+on public.cards
+for each row
+execute function
+  public.nexo_reset_web_access_on_owner_change();
+revoke all
+on function public.nexo_reset_web_access_on_owner_change()
+from public, anon, authenticated;
+
 
 revoke all
 on table public.card_web_access
@@ -127,7 +169,7 @@ create or replace function public.nexo_initialize_web_access_secret(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, auth, extensions
+set search_path = ''
 as $$
 declare
   v_user_id uuid := auth.uid();
@@ -233,7 +275,7 @@ create or replace function public.nexo_authorize_web_device(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, auth, extensions
+set search_path = ''
 as $$
 declare
   v_user_id uuid := auth.uid();
