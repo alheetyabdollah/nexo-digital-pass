@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
@@ -12,7 +12,10 @@ import {
 import { decryptVaultKey } from "@/lib/crypto/vault";
 import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 import MigrationTurnstile from "@/components/security/MigrationTurnstile";
-import { ensureAnonymousSession } from "@/lib/auth-session";
+import {
+  ensureAnonymousSession,
+  getAnonymousSessionUserId,
+} from "@/lib/auth-session";
 
 type UnlockPageProps = {
   cardCode: string | null;
@@ -57,14 +60,76 @@ export default function UnlockPage({
   const [captchaError, setCaptchaError] =
     useState("");
 
+  const [webSessionReady, setWebSessionReady] =
+    useState(
+      Boolean(
+        _migrationSecret ||
+        _transferProof
+      )
+    );
+
+  const [needsWebSession, setNeedsWebSession] =
+    useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (_migrationSecret || _transferProof) {
+      setNeedsWebSession(true);
+      setWebSessionReady(true);
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function checkWebSession() {
+      try {
+        const userId =
+          await getAnonymousSessionUserId();
+
+        if (!cancelled) {
+          setNeedsWebSession(!userId);
+        }
+      } catch (error) {
+        console.error(
+          "Web session check error:",
+          error
+        );
+
+        if (!cancelled) {
+          setNeedsWebSession(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setWebSessionReady(true);
+        }
+      }
+    }
+
+    void checkWebSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    _migrationSecret,
+    _transferProof,
+  ]);
+
   const requiresSecurityCheck =
     Boolean(
       _migrationSecret ||
-      _transferProof
+      _transferProof ||
+      needsWebSession
     );
 
   const unlockVault = async () => {
     if (isLoading) return;
+
+    if (!webSessionReady) {
+      return;
+    }
 
     const cleanedCardCode = cardCode?.trim();
 
@@ -89,7 +154,7 @@ export default function UnlockPage({
           );
         } catch (error) {
           console.error(
-            "Migration session error:",
+            "Web session error:",
             error
           );
 
