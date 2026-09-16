@@ -10,6 +10,7 @@ import {
   KDF_ALGORITHM,
 } from "@/lib/crypto/kdf";
 import { decryptVaultKey } from "@/lib/crypto/vault";
+import { deriveWebAccessSecret } from "@/lib/crypto/web-access";
 import { useVaultSession } from "@/components/providers/VaultSessionProvider";
 import MigrationTurnstile from "@/components/security/MigrationTurnstile";
 import {
