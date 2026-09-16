@@ -1,6 +1,6 @@
-﻿import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
-async function getExistingAnonymousUserId() {
+export async function getAnonymousSessionUserId() {
   const {
     data: { session },
     error,
@@ -27,7 +27,7 @@ export async function ensureAnonymousSession(
   captchaToken?: string
 ) {
   const existingUserId =
-    await getExistingAnonymousUserId();
+    await getAnonymousSessionUserId();
 
   if (existingUserId) {
     return existingUserId;
