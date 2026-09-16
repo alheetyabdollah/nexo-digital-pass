@@ -358,6 +358,71 @@ export default function UnlockPage({
         }
       }
 
+      try {
+        const accessSecret =
+          await deriveWebAccessSecret(
+            vaultKeyBytes
+          );
+
+        const {
+          data: authorizeData,
+          error: authorizeError,
+        } = await supabase.rpc(
+          "nexo_authorize_web_device",
+          {
+            p_card_code: cleanedCardCode,
+            p_access_secret: accessSecret,
+          }
+        );
+
+        if (authorizeError) {
+          throw authorizeError;
+        }
+
+        const authorizeResult =
+          authorizeData as
+            | { ok: boolean }
+            | null;
+
+        if (!authorizeResult?.ok) {
+          const {
+            data: initializeData,
+            error: initializeError,
+          } = await supabase.rpc(
+            "nexo_initialize_web_access_secret",
+            {
+              p_card_code: cleanedCardCode,
+              p_access_secret: accessSecret,
+            }
+          );
+
+          if (initializeError) {
+            throw initializeError;
+          }
+
+          const initializeResult =
+            initializeData as
+              | { ok: boolean }
+              | null;
+
+          if (!initializeResult?.ok) {
+            setStatus(
+              "تعذر اعتماد هذا الجهاز للبطاقة"
+            );
+            return;
+          }
+        }
+      } catch (error) {
+        console.error(
+          "Web device authorization error:",
+          error
+        );
+
+        setStatus(
+          "تعذر اعتماد هذا الجهاز للبطاقة"
+        );
+        return;
+      }
       if (_migrationSecret || _transferProof) {
         const cleanUnlockUrl =
           `/unlock?card=${encodeURIComponent(
