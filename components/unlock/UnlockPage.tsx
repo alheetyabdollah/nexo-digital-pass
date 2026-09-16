@@ -406,10 +406,9 @@ export default function UnlockPage({
               | null;
 
           if (!initializeResult?.ok) {
-            setStatus(
-              "تعذر اعتماد هذا الجهاز للبطاقة"
+            console.warn(
+              "Web access was not initialized for this session"
             );
-            return;
           }
         }
       } catch (error) {
@@ -417,11 +416,6 @@ export default function UnlockPage({
           "Web device authorization error:",
           error
         );
-
-        setStatus(
-          "تعذر اعتماد هذا الجهاز للبطاقة"
-        );
-        return;
       }
       if (_migrationSecret || _transferProof) {
         const cleanUnlockUrl =
