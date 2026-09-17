@@ -40,6 +40,16 @@ type MigrationClaimResult = {
   claimed_at?: string;
 };
 
+const LEGACY_REPLACEMENT_CARDS = new Set([
+  "NX-000061",
+  "NX-000102",
+  "NX-000117",
+  "NX-000119",
+  "NX-000132",
+  "NX-000133",
+  "NX-000136",
+]);
+
 export default function UnlockPage({
   cardCode,
   migrationSecret: _migrationSecret,
@@ -124,6 +134,81 @@ export default function UnlockPage({
       _transferProof ||
       needsWebSession
     );
+
+  const requiresCardReplacement =
+    Boolean(
+      cardCode &&
+      LEGACY_REPLACEMENT_CARDS.has(
+        cardCode.trim().toUpperCase()
+      )
+    );
+
+  if (requiresCardReplacement) {
+    return (
+      <main
+        dir="rtl"
+        className="relative min-h-screen overflow-hidden bg-[#050505] text-white"
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,106,0,0.14),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(255,106,0,0.09),transparent_30%)]" />
+
+        <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-8">
+          <div className="rounded-[34px] border border-orange-500/20 bg-gradient-to-b from-white/[0.07] to-white/[0.035] p-7 text-center shadow-[0_35px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl">
+            <h1 className="text-4xl font-black tracking-[0.16em] text-[#ff6500]">
+              NEXO
+            </h1>
+
+            <p className="mt-1 text-[10px] font-bold tracking-[0.45em] text-white/40">
+              DIGITAL PASS
+            </p>
+
+            <div className="mx-auto mt-8 flex h-20 w-20 items-center justify-center rounded-3xl border border-orange-500/30 bg-orange-500/10 text-4xl">
+              &#8635;
+            </div>
+
+            <h2 className="mt-6 text-2xl font-black">
+              &#1576;&#1591;&#1575;&#1602;&#1578;&#1603; &#1578;&#1581;&#1578;&#1575;&#1580; &#1578;&#1581;&#1583;&#1610;&#1579;
+            </h2>
+
+            <p className="mt-4 text-sm leading-7 text-white/60">
+              &#1578;&#1605; &#1578;&#1581;&#1583;&#1610;&#1579; &#1606;&#1592;&#1575;&#1605; NEXO Digital Pass
+              &#32;&#1573;&#1604;&#1609; &#1606;&#1587;&#1582;&#1577; &#1571;&#1581;&#1583;&#1579;.
+              &#32;&#1576;&#1591;&#1575;&#1602;&#1578;&#1603; &#1575;&#1604;&#1581;&#1575;&#1604;&#1610;&#1577; &#1605;&#1606; &#1575;&#1604;&#1573;&#1589;&#1583;&#1575;&#1585; &#1575;&#1604;&#1587;&#1575;&#1576;&#1602;
+              &#32;&#1608;&#1578;&#1581;&#1578;&#1575;&#1580; &#1573;&#1604;&#1609; &#1575;&#1587;&#1578;&#1576;&#1583;&#1575;&#1604;&#1607;&#1575;.
+            </p>
+
+            <p className="mt-3 text-sm font-bold leading-7 text-orange-300">
+              &#1610;&#1585;&#1580;&#1609; &#1575;&#1604;&#1578;&#1608;&#1575;&#1589;&#1604; &#1605;&#1593;&#1606;&#1575; &#1604;&#1575;&#1587;&#1578;&#1576;&#1583;&#1575;&#1604; &#1575;&#1604;&#1576;&#1591;&#1575;&#1602;&#1577; &#1605;&#1580;&#1575;&#1606;&#1611;&#1575;.
+            </p>
+
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
+              <span className="text-xs text-white/40">
+                &#1585;&#1602;&#1605; &#1575;&#1604;&#1576;&#1591;&#1575;&#1602;&#1577;
+              </span>
+              <div
+                dir="ltr"
+                className="mt-1 text-sm font-black tracking-wider text-white/85"
+              >
+                {cardCode}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm font-bold text-green-300">
+              &#1576;&#1610;&#1575;&#1606;&#1575;&#1578;&#1603; &#1575;&#1604;&#1581;&#1575;&#1604;&#1610;&#1577; &#1578;&#1576;&#1602;&#1609; &#1605;&#1581;&#1601;&#1608;&#1592;&#1577; &#1608;&#1570;&#1605;&#1606;&#1577;.
+            </div>
+
+            <a
+              href="https://wa.me/9647825515160"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 flex h-16 w-full items-center justify-center rounded-2xl bg-gradient-to-l from-[#ff6500] to-[#ff7a00] text-base font-black text-white shadow-[0_18px_40px_rgba(255,106,0,0.28)]"
+            >
+              &#1578;&#1608;&#1575;&#1589;&#1604; &#1605;&#1593;&#1606;&#1575; &#1604;&#1604;&#1575;&#1587;&#1578;&#1576;&#1583;&#1575;&#1604;
+            </a>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   const unlockVault = async () => {
     if (isLoading) return;
