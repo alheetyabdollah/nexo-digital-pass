@@ -35,12 +35,14 @@ export async function requireAdmin(): Promise<AdminAuthResult> {
     };
   }
 
-  const { data: adminUser, error: adminError } =
-    await supabaseAdmin
-      .from("admin_users")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
+  const {
+    data: adminUser,
+    error: adminError,
+  } = await supabaseAdmin
+    .from("admin_users")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   if (adminError || !adminUser) {
     return {
@@ -55,6 +57,25 @@ export async function requireAdmin(): Promise<AdminAuthResult> {
       authorized: false,
       status: 403,
       error: "صلاحية الأدمن غير كافية",
+    };
+  }
+
+  const {
+    data: aalData,
+    error: aalError,
+  } =
+    await supabase.auth.mfa
+      .getAuthenticatorAssuranceLevel();
+
+  if (
+    aalError ||
+    aalData.currentLevel !== "aal2"
+  ) {
+    return {
+      authorized: false,
+      status: 403,
+      error:
+        "يجب إكمال المصادقة الثنائية أولًا",
     };
   }
 
