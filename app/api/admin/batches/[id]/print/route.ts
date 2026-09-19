@@ -15,7 +15,10 @@ import {
 import QRCode from "qrcode";
 import fs from "fs/promises";
 import path from "path";
-
+import {
+  deriveActivationSecret,
+  hashActivationSecret,
+} from "@/lib/activationToken";
 type RouteContext = {
   params: Promise<{
     id: string;
@@ -35,6 +38,10 @@ type CardRecord = {
   card_code: string;
   status: string | null;
   batch_id: string | null;
+  activation_mode: string | null;
+  print_status: string | null;
+  activation_secret_hash: string | null;
+  activation_secret_used_at: string | null;
 };
 
 const SITE_ORIGIN =
@@ -411,7 +418,16 @@ export async function GET(
       adminSupabase
         .from("cards")
         .select(
-          "id, card_code, status, batch_id"
+          `
+            id,
+            card_code,
+            status,
+            batch_id,
+            activation_mode,
+            print_status,
+            activation_secret_hash,
+            activation_secret_used_at
+          `
         )
         .eq("batch_id", batchId)
         .order("card_code", {
@@ -568,11 +584,76 @@ export async function GET(
           }
         );
 
-        const cardUrl =
+        let cardUrl =
           `${SITE_ORIGIN}/card/` +
-          encodeURIComponent(
-            card.card_code
-          );
+          encodeURIComponent(card.card_code);
+
+        if (card.activation_mode === "secure_v2") {
+          if (
+            card.status !== "New" ||
+            card.activation_secret_used_at !== null
+          ) {
+            throw new Error(
+              `Secure card cannot be printed: ${card.card_code}`
+            );
+          }
+
+          const activationSecret =
+            deriveActivationSecret(card.id);
+
+          const activationSecretHash =
+            hashActivationSecret(
+              activationSecret
+            );
+
+          if (!card.activation_secret_hash) {
+            if (card.print_status !== "unprinted") {
+              throw new Error(
+                `Printed secure card has no activation secret: ${card.card_code}`
+              );
+            }
+
+            const { error: secretError } =
+              await adminSupabase
+                .from("cards")
+                .update({
+                  activation_secret_hash:
+                    activationSecretHash,
+                  activation_secret_created_at:
+                    new Date().toISOString(),
+                })
+                .eq("id", card.id)
+                .eq("status", "New")
+                .eq(
+                  "activation_mode",
+                  "secure_v2"
+                )
+                .eq(
+                  "print_status",
+                  "unprinted"
+                )
+                .is(
+                  "activation_secret_hash",
+                  null
+                );
+
+            if (secretError) {
+              throw secretError;
+            }
+          } else if (
+            card.activation_secret_hash !==
+            activationSecretHash
+          ) {
+            throw new Error(
+              `Activation secret mismatch: ${card.card_code}`
+            );
+          }
+
+          cardUrl =
+            `${SITE_ORIGIN}/card/` +
+            encodeURIComponent(card.card_code) +
+            `?token=${activationSecret}`;
+        }
 
         const qrDataUrl =
           await QRCode.toDataURL(
