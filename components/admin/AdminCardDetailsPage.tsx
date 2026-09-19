@@ -8,6 +8,8 @@ type CardDetails = {
   id: string;
   card_code: string;
   status: string | null;
+  activation_mode: string | null;
+print_status: string | null;
   created_at: string | null;
   updated_at: string | null;
   crypto_version: number | null;
@@ -47,7 +49,10 @@ function SecurityRow({
 export default function AdminCardDetailsPage({ card }: Props) {
   const router = useRouter();
   const isActivated = card.status === "Activated";
-
+const isSecureNewCard =
+  card.status === "New" &&
+  card.activation_mode === "secure_v2" &&
+  card.print_status === "unprinted";
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [showQr, setShowQr] = useState(false);
   const [copyStatus, setCopyStatus] = useState("نسخ");
@@ -58,24 +63,28 @@ export default function AdminCardDetailsPage({ card }: Props) {
 
   const cardUrl = `https://nexo-digital-pass.vercel.app/card/${card.card_code}`;
 
-  useEffect(() => {
-    async function createQr() {
-      try {
-        const dataUrl = await QRCode.toDataURL(cardUrl, {
-          width: 700,
-          margin: 2,
-          errorCorrectionLevel: "H",
-        });
-
-        setQrDataUrl(dataUrl);
-      } catch (error) {
-        console.error("QR generation error:", error);
-      }
+ useEffect(() => {
+  async function createQr() {
+    if (isSecureNewCard) {
+      setQrDataUrl("");
+      return;
     }
 
-    createQr();
-  }, [cardUrl]);
+    try {
+      const dataUrl = await QRCode.toDataURL(cardUrl, {
+        width: 700,
+        margin: 2,
+        errorCorrectionLevel: "H",
+      });
 
+      setQrDataUrl(dataUrl);
+    } catch (error) {
+      console.error("QR generation error:", error);
+    }
+  }
+
+  createQr();
+}, [cardUrl, isSecureNewCard]);
   const copyCardLink = async () => {
     try {
       await navigator.clipboard.writeText(cardUrl);
@@ -88,7 +97,48 @@ export default function AdminCardDetailsPage({ card }: Props) {
       setCopyStatus("تعذر النسخ");
     }
   };
+const openQr = async () => {
+  if (!isSecureNewCard) {
+    setShowQr(true);
+    return;
+  }
 
+  try {
+    const response = await fetch(
+      `/api/admin/cards/${card.id}/activation-qr`,
+      {
+        method: "POST",
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.activation_url) {
+      throw new Error(
+        result.error || "تعذر إنشاء QR التفعيل"
+      );
+    }
+
+    const dataUrl = await QRCode.toDataURL(
+      result.activation_url,
+      {
+        width: 700,
+        margin: 2,
+        errorCorrectionLevel: "H",
+      }
+    );
+
+    setQrDataUrl(dataUrl);
+    setShowQr(true);
+  } catch (error) {
+    console.error("Activation QR error:", error);
+    alert(
+      error instanceof Error
+        ? error.message
+        : "تعذر إنشاء QR التفعيل"
+    );
+  }
+};
   const printQr = () => {
     if (!qrDataUrl) {
       return;
@@ -363,7 +413,7 @@ export default function AdminCardDetailsPage({ card }: Props) {
           <div className="mt-5 grid gap-3">
             <button
               type="button"
-              onClick={() => setShowQr(true)}
+              onClick={openQr}
               className="flex items-center justify-between rounded-[18px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-orange-500/40 hover:bg-orange-500/10"
             >
               <span className="font-bold">👁️ عرض QR</span>

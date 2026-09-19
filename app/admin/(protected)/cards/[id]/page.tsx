@@ -18,20 +18,22 @@ export default async function Page({
     await supabaseAdmin
       .from("cards")
       .select(
-        `
-          id,
-          card_code,
-          status,
-          created_at,
-          updated_at,
-          crypto_version,
-          kdf_algorithm,
-          batch_id,
-          card_password_hash,
-          recovery_key_hash,
-          encrypted_vault_key
-        `
-      )
+  `
+    id,
+    card_code,
+    status,
+    activation_mode,
+    print_status,
+    created_at,
+    updated_at,
+    crypto_version,
+    kdf_algorithm,
+    batch_id,
+    card_password_hash,
+    recovery_key_hash,
+    encrypted_vault_key
+  `
+)
       .eq("id", id)
       .maybeSingle();
 
